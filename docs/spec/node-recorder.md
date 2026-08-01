@@ -44,15 +44,17 @@ Node Recorder runs as a systemd service and queries the Prometheus HTTP API ever
 
 ### Block lag trigger
 
-Node Recorder does not compute block lag itself. It periodically queries the state of the existing Prometheus alert. The block lag threshold defaults to `10 blocks` and can be changed through configuration, but the actual threshold and `for` condition are evaluated by the Prometheus alert rule. Node Recorder only reads the firing state without recomputing it, so the threshold stays managed in one place.
+Node Recorder does not compute block lag itself. It periodically queries the state of the existing Prometheus alert, `CometBFTBlockHeightBehind`, defined in `stablebft_alert_rules.yml`. For `chain="stable"`, the rule fires when more than `40 blocks` behind the network tip, with `for: 10s`, meaning the condition only needs to hold briefly before the alert fires. The actual threshold and `for` condition are evaluated entirely by the Prometheus alert rule, not by Node Recorder, so the threshold stays managed in one place.
 
 ```javascript
 ALERTS{
-  alertname="<block-lag-alert>",
+  alertname="CometBFTBlockHeightBehind",
   alertstate="firing",
-  instance="<target-node>"
+  instance="<NODE_ID>"
 } == 1
 ```
+
+Confirmed: the `instance` label carries the `NODE_ID` format used elsewhere in this doc (e.g. `main-stable-archive-ovh-de`), not the `target` label the rule also carries. The label name used for matching is kept configurable (`ALERT_NODE_LABEL`, see Configuration) rather than hardcoded to `instance`, in case this changes per node or network later.
 
 Incident capture only runs when a firing alert exists for that node.
 
@@ -74,7 +76,7 @@ idle -> capturing -> cooldown -> idle
 2. Check whether a result with `alertstate="firing"` exists.
 3. Check the lock and cooldown state.
 4. Create the incident ID and working directory.
-5. Send SIGUSR1 to the Stablevisor process to produce its existing incident snapshot.
+5. Send SIGUSR1 to the Stablevisor process to trigger its incident snapshot, then poll until the snapshot directory's `.complete` marker appears (see Stablevisor Signal and Snapshot below) rather than assuming the write finished synchronously.
 6. Immediately collect goroutine, heap, and mutex profiles in parallel.
 7. Collect a CPU profile for a configured duration.
 8. Extract the incident time window from `/var/log/haproxy.log`.
@@ -82,6 +84,17 @@ idle -> capturing -> cooldown -> idle
 10. Compress all files and upload them to S3.
 11. Send the S3 location and collection result to the Slack channel.
 12. Clean up local temporary files and enter cooldown.
+
+## Stablevisor Signal and Snapshot
+
+Confirmed against Stablevisor's own incident-collector spec:
+
+- `SIGUSR1` calls `TriggerSnapshot(reason)` directly; the same path also fires automatically on `daemon.crashed`.
+- Snapshots are written atomically: data lands in a `.tmp-<id>` directory first, then the directory is renamed to its final `<id>`, then a `.complete` marker file is written inside it. `ListIncidents`/`GetIncident` (and Node Recorder) must only treat a directory as ready once `.complete` exists.
+- The snapshot's log capture is a ring buffer (5,000 lines / roughly 8-10 minutes of history by default), so SIGUSR1 must be sent promptly after the block-lag alert fires or earlier log context is lost.
+- Retention is 10 incidents or 10GB total, oldest deleted first. Node Recorder should pick up the newly created snapshot before it can be rotated away by unrelated incidents.
+
+Decision: look up the PID via systemd (`systemctl show <STABLEVISOR_SERVICE_NAME> --property=MainPID --value`) immediately before sending the signal, rather than a PID file or `pgrep`/`pidof` name matching. Stablevisor is not documented to write a PID file, and process-name matching is fragile across restarts; systemd already tracks the authoritative live PID for any unit it supervises, and Node Recorder is itself deployed as a systemd service, so this adds no new dependency. A `MainPID` of `0` means the service isn't running, which routes into the existing "Stablevisor not running" failure path below.
 
 ## Collected Artifacts
 
@@ -147,16 +160,18 @@ If some artifact collection fails, the upload of the remaining data still procee
 
 For the MVP, the raw HAProxy log is trimmed to the incident time window and kept as is.
 
-Items to confirm:
+Confirmed:
 
-- whether `/var/log/haproxy.log` currently includes request method and latency
-- whether the JSON-RPC method or request body is logged
-- the maximum size limit for the request body
-- masking of sensitive data such as transaction, signature, and credential fields
-- the memory and latency impact of HAProxy from storing this log data
+- log path is `/var/log/haproxy.log`
+- the request body is included in the log, truncated to a maximum length of `65536` bytes
+- sensitive data (transaction, signature, credential fields) is **not** masked
+- disk usage impact from storing the request body is negligible
+
+Still open:
+
 - whether the incident window needs to be extracted from rotated log files
 
-**Note:** the CPU and memory overhead from HAProxy request body logging was found to be minimal, but disk usage has not been confirmed yet.
+**Note:** the CPU and memory overhead from HAProxy request body logging was found to be minimal, and disk usage has now also been confirmed as negligible.
 
 ## Configuration
 
@@ -164,15 +179,18 @@ Items to confirm:
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 
-# Prometheus alert rule
-BLOCK_LAG_THRESHOLD_BLOCKS="10"
+# Prometheus alert rule (informational only, owned by the alert rule)
+BLOCK_LAG_THRESHOLD_BLOCKS="40"
 
 # Node Recorder
 PROMETHEUS_URL="http://monitoring.internal:9090"
-ALERT_NAME="<block-lag-alert>"
+ALERT_NAME="CometBFTBlockHeightBehind"
 ALERT_STATE="firing"
+ALERT_NODE_LABEL="instance"
 POLL_INTERVAL_SECONDS="15"
 COOLDOWN_SECONDS="900"
+
+STABLEVISOR_SERVICE_NAME="stablevisor"
 
 PPROF_URL="http://127.0.0.1:6060/debug/pprof"
 CPU_PROFILE_SECONDS="20"
@@ -180,12 +198,41 @@ CPU_PROFILE_SECONDS="20"
 HAPROXY_LOG="/var/log/haproxy.log"
 LOG_WINDOW_BEFORE_SECONDS="600"
 
-S3_PREFIX="s3://<bucket>/node-recorder"
+S3_PREFIX="s3://altuslabs-node-recorder/node-recorder"
+
+SLACK_WEBHOOK_URL="<secret>"
 ```
 
-`BLOCK_LAG_THRESHOLD_BLOCKS` is applied on the Prometheus alert rule side and defaults to `10`. Node Recorder does not re-evaluate this threshold itself.
+`BLOCK_LAG_THRESHOLD_BLOCKS` is applied on the Prometheus alert rule side and is `40` for `chain="stable"`. Node Recorder does not re-evaluate this threshold itself; the value here is documentation, not enforcement.
 
-Real secrets must not be committed to the script. On AWS, prefer the instance role. The authentication method for any other environment is decided separately.
+Real secrets (including `SLACK_WEBHOOK_URL`) must not be committed to the script. On AWS, prefer the instance role. The authentication method for any other environment is decided separately.
+
+## S3 Upload Permissions
+
+Bucket: `altuslabs-node-recorder`. The policy below grants only what the upload step needs, write access under `node-recorder/`, no read, no delete, no bucket-level permissions.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NodeRecorderUpload",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:AbortMultipartUpload"
+      ],
+      "Resource": "arn:aws:s3:::altuslabs-node-recorder/node-recorder/*"
+    }
+  ]
+}
+```
+
+Attach this to the instance role (per the AWS preference above) rather than issuing long-lived credentials. `s3:AbortMultipartUpload` covers incident bundles large enough to use multipart upload; it is not needed if bundles always upload as a single `PutObject` call.
+
+## Slack Notification
+
+Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST per incident (S3 location plus collection result summary) fits a post-only, single-channel use case. No message editing, reactions, or channel listing is needed, so the extra scope and setup of a full bot integration isn't justified. The webhook URL is a secret and follows the same handling as `SLACK_WEBHOOK_URL` above: not committed to the script, injected at deploy time.
 
 ## Runtime and Deployment
 
