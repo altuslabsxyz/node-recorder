@@ -75,3 +75,19 @@ pprof_collect_quick() {
   done
   return 0
 }
+
+# pprof_collect_cpu <results_file> <base_url> <out_dir> <duration_seconds>
+# Fetches the CPU profile at ?seconds=<duration_seconds>. The curl timeout
+# is duration_seconds plus PPROF_CPU_GRACE_SECONDS (default 10s), to allow
+# for transport overhead beyond the server-side profiling window itself.
+pprof_collect_cpu() {
+  local results_file="$1"
+  local base_url="$2"
+  local out_dir="$3"
+  local duration_seconds="$4"
+  local grace_seconds="${PPROF_CPU_GRACE_SECONDS:-10}"
+  local timeout_seconds=$((duration_seconds + grace_seconds))
+
+  pprof_fetch "$results_file" "cpu_profile" "${base_url}/profile?seconds=${duration_seconds}" \
+    "$out_dir/cpu.pb.gz" "$timeout_seconds"
+}
