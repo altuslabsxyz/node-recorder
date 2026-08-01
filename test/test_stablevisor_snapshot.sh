@@ -46,3 +46,26 @@ assert_exit_code 1 "$exit_code2" "trigger_snapshot times out when .complete neve
 kill "$fake_pid2" 2>/dev/null
 wait "$fake_pid2" 2>/dev/null
 rm -rf "$snapshot_base_dir2"
+
+# Case 3: out-var name collides with the function's own internal locals
+# (e.g. "found" or "pid"). Regression test for a bug where `printf -v`
+# resolved to the function's own local of that name instead of the
+# caller's variable, silently dropping the result while still returning 0.
+snapshot_base_dir3="$(mktemp -d)"
+bash "$TEST_DIR/fakes/fake_stablevisor.sh" "$snapshot_base_dir3" 1 &
+fake_pid3=$!
+sleep 0.2
+
+export FAKE_SYSTEMCTL_PID="$fake_pid3"
+export STABLEVISOR_SNAPSHOT_TIMEOUT_SECONDS=5
+export STABLEVISOR_SNAPSHOT_POLL_INTERVAL_SECONDS=1
+
+unset found pid
+stablevisor_trigger_snapshot "$snapshot_base_dir3" found
+exit_code3=$?
+assert_exit_code 0 "$exit_code3" "trigger_snapshot succeeds with out-var name colliding with internal local 'found'"
+assert_eq "incident-fake-$fake_pid3" "${found:-}" "caller's 'found' variable actually receives the snapshot dir name"
+assert_file_exists "$snapshot_base_dir3/$found/.complete" "snapshot .complete marker exists (out-var name 'found')"
+
+wait "$fake_pid3" 2>/dev/null
+rm -rf "$snapshot_base_dir3"
