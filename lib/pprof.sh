@@ -44,3 +44,34 @@ pprof_fetch() {
   record_result "$results_file" "$artifact_key" "ok"
   return 0
 }
+
+# pprof_collect_quick <results_file> <base_url> <out_dir>
+# Fetches goroutine, heap, and mutex profiles in parallel. Each fetch has
+# its own timeout (PPROF_QUICK_TIMEOUT_SECONDS, default 10s) and records
+# its own result via pprof_fetch; one failing does not stop or fail the
+# others. record_result's appends are safe here because each is a single
+# short printf write (well under PIPE_BUF), so concurrent appends from the
+# parallel subshells don't interleave within a line.
+pprof_collect_quick() {
+  local results_file="$1"
+  local base_url="$2"
+  local out_dir="$3"
+  local timeout_seconds="${PPROF_QUICK_TIMEOUT_SECONDS:-10}"
+
+  local pids=()
+
+  pprof_fetch "$results_file" "goroutine_profile" "$base_url/goroutine" "$out_dir/goroutine.pb.gz" "$timeout_seconds" &
+  pids+=("$!")
+
+  pprof_fetch "$results_file" "heap_profile" "$base_url/heap" "$out_dir/heap.pb.gz" "$timeout_seconds" &
+  pids+=("$!")
+
+  pprof_fetch "$results_file" "mutex_profile" "$base_url/mutex" "$out_dir/mutex.pb.gz" "$timeout_seconds" &
+  pids+=("$!")
+
+  local pid
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
+  return 0
+}
