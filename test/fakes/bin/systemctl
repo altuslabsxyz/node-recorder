@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# test/fakes/bin/systemctl - stands in for
+# `systemctl show <service> --property=MainPID --value` in tests.
+# Behavior controlled by FAKE_SYSTEMCTL_PID:
+#   unset       -> simulate command failure (exit 1)
+#   "0"         -> simulate "service not running"
+#   <n>         -> print n as MainPID
+
+if [[ "$1" == "show" && "$3" == "--property=MainPID" && "$4" == "--value" ]]; then
+  if [[ -z "${FAKE_SYSTEMCTL_PID:-}" ]]; then
+    exit 1
+  fi
+  echo "$FAKE_SYSTEMCTL_PID"
+  exit 0
+fi
+
+exit 1
