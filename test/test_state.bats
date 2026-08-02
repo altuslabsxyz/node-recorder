@@ -40,6 +40,22 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "set_state rejects an invalid state value" {
+  run set_state "node-a" "AlertX" "bogus" 0
+  [ "$status" -eq 1 ]
+}
+
+@test "set_state rejects a non-numeric cooldown_until" {
+  run set_state "node-a" "AlertX" "cooldown" "notanumber"
+  [ "$status" -eq 1 ]
+}
+
+@test "set_state rejecting invalid input does not write a state file" {
+  set_state "node-a" "AlertX" "bogus" 0 || true
+  result="$(get_state "node-a" "AlertX")"
+  [ "$result" = "idle" ]
+}
+
 @test "acquire_run_lock succeeds when the lock is free" {
   run acquire_run_lock
   [ "$status" -eq 0 ]
