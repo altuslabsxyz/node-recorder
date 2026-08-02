@@ -4,7 +4,7 @@ _state_file() {
   local node="$1"
   local alertname="$2"
   local key
-  key="$(printf '%s__%s' "$node" "$alertname" | tr '/ ' '__')"
+  key="$(printf '%s__%s' "$node" "$alertname" | tr -c 'A-Za-z0-9_.-' '_')"
   printf '%s/%s.state' "$STATE_DIR" "$key"
 }
 
@@ -19,9 +19,14 @@ get_state() {
     return 0
   fi
 
-  local STATE COOLDOWN_UNTIL
-  # shellcheck disable=SC1090
-  source "$file"
+  local STATE="" COOLDOWN_UNTIL=""
+  local k v
+  while IFS='=' read -r k v; do
+    case "$k" in
+      STATE) STATE="$v" ;;
+      COOLDOWN_UNTIL) COOLDOWN_UNTIL="$v" ;;
+    esac
+  done < "$file"
   echo "${STATE:-idle}"
 }
 
@@ -31,6 +36,13 @@ set_state() {
   local state="$3"
   local cooldown_until="${4:-0}"
   local file
+
+  case "$state" in
+    idle|capturing|cooldown) ;;
+    *) echo "set_state: invalid state '$state'" >&2; return 1 ;;
+  esac
+  [[ "$cooldown_until" =~ ^[0-9]+$ ]] || { echo "set_state: invalid cooldown_until '$cooldown_until'" >&2; return 1; }
+
   file="$(_state_file "$node" "$alertname")"
 
   mkdir -p "$STATE_DIR"
@@ -50,9 +62,14 @@ in_cooldown() {
     return 1
   fi
 
-  local STATE COOLDOWN_UNTIL
-  # shellcheck disable=SC1090
-  source "$file"
+  local STATE="" COOLDOWN_UNTIL=""
+  local k v
+  while IFS='=' read -r k v; do
+    case "$k" in
+      STATE) STATE="$v" ;;
+      COOLDOWN_UNTIL) COOLDOWN_UNTIL="$v" ;;
+    esac
+  done < "$file"
 
   if [[ "${STATE:-idle}" != "cooldown" ]]; then
     return 1
