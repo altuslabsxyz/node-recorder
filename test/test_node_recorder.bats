@@ -12,6 +12,7 @@ setup() {
     case "$CURL_FIXTURE" in
       firing) cat "${BATS_TEST_DIRNAME}/fixtures/firing.json"; printf '\n200' ;;
       absent) cat "${BATS_TEST_DIRNAME}/fixtures/absent.json"; printf '\n200' ;;
+      network_error) echo "curl: (7) Failed to connect" >&2; return 7 ;;
     esac
   }
   export -f curl
@@ -55,6 +56,20 @@ teardown() {
 
   [ ! -s "$CAPTURE_LOG" ]
   [ "$(get_state "$NODE_ID" "$ALERT_NAME")" = "idle" ]
+}
+
+@test "poll_once does nothing and releases the lock when the Prometheus query fails" {
+  export CURL_FIXTURE=network_error
+
+  poll_once
+
+  [ ! -s "$CAPTURE_LOG" ]
+  [ "$(get_state "$NODE_ID" "$ALERT_NAME")" = "idle" ]
+
+  # confirm the lock was actually released (not leaked) by acquiring it again
+  run acquire_run_lock
+  [ "$status" -eq 0 ]
+  release_run_lock
 }
 
 @test "poll_once skips the cycle when the lock is already held" {
