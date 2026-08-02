@@ -46,14 +46,14 @@ teardown() {
 }
 
 @test "acquire_run_lock fails when the lock is already held" {
-  exec 200>"$LOCK_FILE"
-  flock -n 200
+  flock -n "$LOCK_FILE" sleep 2 &
+  holder_pid=$!
+  sleep 0.2
 
   run acquire_run_lock
   [ "$status" -eq 1 ]
 
-  flock -u 200
-  exec 200>&-
+  wait "$holder_pid" 2>/dev/null || true
 }
 
 @test "release_run_lock allows a subsequent acquire_run_lock to succeed" {
