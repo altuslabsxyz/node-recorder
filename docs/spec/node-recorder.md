@@ -79,7 +79,7 @@ idle -> capturing -> cooldown -> idle
 5. Send SIGUSR1 to the Stablevisor process to trigger its incident snapshot, then poll until the snapshot directory's `.complete` marker appears (see Stablevisor Signal and Snapshot below) rather than assuming the write finished synchronously.
 6. Immediately collect goroutine, heap, and mutex profiles in parallel.
 7. Collect a CPU profile for a configured duration.
-8. Extract the incident time window from `/var/log/haproxy.log`.
+8. Extract the incident time window from `/var/log/haproxy.log`, reaching into the previous day's rotated file when the window crosses the daily rotation boundary, and cap the extracted output at `HAPROXY_LOG_MAX_BYTES` (see HAProxy Logging Policy below).
 9. Write the manifest and record any collection errors.
 10. Compress all files and upload them to S3.
 11. Send the S3 location and collection result to the Slack channel.
@@ -163,13 +163,17 @@ For the MVP, the raw HAProxy log is trimmed to the incident time window and kept
 Confirmed:
 
 - log path is `/var/log/haproxy.log`
+- each line is a JSON object emitted through syslog, prefixed with an RFC3339 receive timestamp that includes year and UTC offset, e.g. `2026-08-03T02:12:21.725958+00:00 <host> haproxy[<pid>]: {"timestamp":"1785723141.549", ...}`. The leading syslog timestamp (not the epoch value inside the JSON body) is what Node Recorder matches the incident window against.
 - the request body is included in the log, truncated to a maximum length of `65536` bytes
 - sensitive data (transaction, signature, credential fields) is **not** masked
 - disk usage impact from storing the request body is negligible
+- `/var/log/haproxy.log` rotates daily via `logrotate` (around 00:02-00:03 local time), with prior days kept as `haproxy.log.1.gz`, `haproxy.log.2.gz`, ... (compression starts immediately, no `delaycompress`); 7 days are retained, each roughly 2-3GB compressed
 
-Still open:
+Decision: match window timestamps by comparing the first 19 characters of the leading syslog timestamp (`YYYY-MM-DDTHH:MM:SS`) as a plain string, rather than parsing each line with `date`. This is a single-pass, per-line-cheap comparison that sorts identically to chronological order, on the assumption that the timezone offset is consistently `+00:00` across nodes; if a node's syslog timestamp offset differs, this comparison would need revisiting.
 
-- whether the incident window needs to be extracted from rotated log files
+Decision: rather than assume a fixed rotation time, rotated-file lookback is self-detecting. Before filtering, Node Recorder peeks at the first line of the live `haproxy.log`; if that line's timestamp is already later than the window's start, the window reaches into the previous day, so `haproxy.log.1` or `haproxy.log.1.gz` (whichever exists, read via `zcat -f` so both compressed and uncompressed are handled the same way) is also scanned and its matching lines are prepended. Because `LOG_WINDOW_BEFORE_SECONDS` is far smaller than a day, a single rotated file back is always sufficient — no cascading lookback is needed.
+
+Decision: apply an overall size cap via `HAPROXY_LOG_MAX_BYTES` (default `209715200`, 200MB) on the *extracted, already time-filtered* output, separate from the existing per-request-body truncation. If the filtered result exceeds the cap, it is truncated to keep the newest bytes (closest to the incident), since the oldest part of the lookback window is the least relevant. Truncation is recorded so a future manifest-writing step can surface it.
 
 **Note:** the CPU and memory overhead from HAProxy request body logging was found to be minimal, and disk usage has now also been confirmed as negligible.
 
@@ -197,6 +201,7 @@ CPU_PROFILE_SECONDS="20"
 
 HAPROXY_LOG="/var/log/haproxy.log"
 LOG_WINDOW_BEFORE_SECONDS="600"
+HAPROXY_LOG_MAX_BYTES="209715200"
 
 S3_PREFIX="s3://altuslabs-node-recorder/node-recorder"
 
