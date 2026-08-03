@@ -12,3 +12,19 @@ _haproxy_epoch_to_iso() {
   date -u -d "@${epoch}" +%Y-%m-%dT%H:%M:%S 2>/dev/null && return 0
   date -u -r "${epoch}" +%Y-%m-%dT%H:%M:%S
 }
+
+# _haproxy_filter_lines <start_iso> <end_iso>
+# Reads lines from stdin, prints to stdout only those whose leading
+# timestamp field (its first 19 characters) falls within
+# [start_iso, end_iso] inclusive, compared as plain strings. start_iso and
+# end_iso must each be exactly 19 characters ("YYYY-MM-DDTHH:MM:SS").
+_haproxy_filter_lines() {
+  local start_iso="$1"
+  local end_iso="$2"
+  awk -v start="$start_iso" -v end="$end_iso" '
+    {
+      ts = substr($1, 1, 19)
+      if (ts >= start && ts <= end) print
+    }
+  '
+}
