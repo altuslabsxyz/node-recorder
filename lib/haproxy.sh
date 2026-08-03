@@ -28,3 +28,28 @@ _haproxy_filter_lines() {
     }
   '
 }
+
+# _haproxy_candidate_files <log_path> <start_iso>
+# Prints, oldest-first, the existing files that need scanning for a
+# window starting at start_iso: the previous day's rotated file
+# ("<log_path>.1.gz" if present, else "<log_path>.1" if present) only
+# when the live file's first line's timestamp is already later than
+# start_iso, then log_path itself. Caller must ensure log_path exists.
+_haproxy_candidate_files() {
+  local log_path="$1"
+  local start_iso="$2"
+
+  local first_line first_ts
+  first_line="$(head -n 1 "$log_path" 2>/dev/null)"
+  first_ts="${first_line:0:19}"
+
+  if [[ -n "$first_ts" && "$first_ts" > "$start_iso" ]]; then
+    if [[ -f "${log_path}.1.gz" ]]; then
+      printf '%s\n' "${log_path}.1.gz"
+    elif [[ -f "${log_path}.1" ]]; then
+      printf '%s\n' "${log_path}.1"
+    fi
+  fi
+
+  printf '%s\n' "$log_path"
+}
