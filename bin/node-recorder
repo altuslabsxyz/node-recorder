@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+# shellcheck source=lib/config.sh
+source "${SCRIPT_DIR}/lib/config.sh"
+# shellcheck source=lib/prometheus.sh
+source "${SCRIPT_DIR}/lib/prometheus.sh"
+# shellcheck source=lib/state.sh
+source "${SCRIPT_DIR}/lib/state.sh"
+
+start_capture() {
+  local node="$1"
+  local alertname="$2"
+  log_info "would start capture for node=${node} alertname=${alertname} (capture flow not yet implemented)"
+}
+
+poll_once() {
+  if ! acquire_run_lock; then
+    log_info "previous run in progress, skipping this cycle"
+    return 0
+  fi
+
+  local alert_state
+  if ! alert_state=$(query_alert_state); then
+    release_run_lock
+    return 0
+  fi
+
+  case "$alert_state" in
+    firing)
+      if in_cooldown "$NODE_ID" "$ALERT_NAME"; then
+        log_info "node=${NODE_ID} alertname=${ALERT_NAME} is firing but in cooldown, skipping"
+      else
+        set_state "$NODE_ID" "$ALERT_NAME" "capturing" 0
+        start_capture "$NODE_ID" "$ALERT_NAME"
+        set_state "$NODE_ID" "$ALERT_NAME" "cooldown" "$(( $(date +%s) + COOLDOWN_SECONDS ))"
+      fi
+      ;;
+    pending|absent)
+      : # no alert, nothing to do
+      ;;
+  esac
+
+  release_run_lock
+  return 0
+}
+
+main() {
+  load_config
+  log_info "node-recorder starting: node=${NODE_ID} alertname=${ALERT_NAME} poll_interval=${POLL_INTERVAL_SECONDS}s"
+
+  while true; do
+    poll_once
+    sleep "$POLL_INTERVAL_SECONDS"
+  done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main
+fi
