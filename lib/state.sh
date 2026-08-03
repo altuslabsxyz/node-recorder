@@ -75,6 +75,12 @@ in_cooldown() {
     return 1
   fi
 
+  # Validate COOLDOWN_UNTIL is numeric before using in arithmetic to prevent
+  # command injection from corrupted or malicious state files.
+  if [[ ! "$COOLDOWN_UNTIL" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
   local now
   now="$(date +%s)"
   if (( now < COOLDOWN_UNTIL )); then

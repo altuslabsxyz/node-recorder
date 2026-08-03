@@ -40,6 +40,21 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "in_cooldown returns false when COOLDOWN_UNTIL is non-numeric (corrupted state)" {
+  # Simulate a corrupted state file by writing it directly
+  node="node-a"
+  alertname="AlertX"
+  local file
+  file="$(printf '%s/%s__%s' "$STATE_DIR" "$node" "$alertname" | tr -c 'A-Za-z0-9_.-' '_').state"
+  mkdir -p "$(dirname "$file")"
+  {
+    printf 'STATE=cooldown\n'
+    printf 'COOLDOWN_UNTIL=notanumber\n'
+  } > "$file"
+  run in_cooldown "$node" "$alertname"
+  [ "$status" -eq 1 ]
+}
+
 @test "set_state rejects an invalid state value" {
   run set_state "node-a" "AlertX" "bogus" 0
   [ "$status" -eq 1 ]
