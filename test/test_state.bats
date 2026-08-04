@@ -41,18 +41,40 @@ teardown() {
 }
 
 @test "in_cooldown returns false when COOLDOWN_UNTIL is non-numeric (corrupted state)" {
-  # Simulate a corrupted state file by writing it directly
+  # Simulate a corrupted state file by writing it directly. Locate it with
+  # _state_file rather than recomputing the path here: passing STATE_DIR through
+  # the key sanitizer turns its `/` separators into `_`, which lands the fixture
+  # in the CWD instead of STATE_DIR and leaves in_cooldown reading a file that
+  # does not exist.
   node="node-a"
   alertname="AlertX"
   local file
-  file="$(printf '%s/%s__%s' "$STATE_DIR" "$node" "$alertname" | tr -c 'A-Za-z0-9_.-' '_').state"
-  mkdir -p "$(dirname "$file")"
+  file="$(_state_file "$node" "$alertname")"
   {
     printf 'STATE=cooldown\n'
     printf 'COOLDOWN_UNTIL=notanumber\n'
   } > "$file"
   run in_cooldown "$node" "$alertname"
   [ "$status" -eq 1 ]
+}
+
+@test "in_cooldown does not evaluate a command substitution in COOLDOWN_UNTIL" {
+  # The exit status alone cannot tell the guard apart from its absence: bash
+  # arithmetic recursively evaluates `x[...]` as an array subscript, runs the
+  # substitution inside it, and still compares as 0, so in_cooldown returns 1
+  # either way. Assert on the side effect instead.
+  node="node-a"
+  alertname="AlertX"
+  local file marker
+  marker="$STATE_DIR/injected"
+  file="$(_state_file "$node" "$alertname")"
+  {
+    printf 'STATE=cooldown\n'
+    printf 'COOLDOWN_UNTIL=x[$(touch "%s")]\n' "$marker"
+  } > "$file"
+  run in_cooldown "$node" "$alertname"
+  [ "$status" -eq 1 ]
+  [ ! -f "$marker" ]
 }
 
 @test "set_state rejects an invalid state value" {
