@@ -7,6 +7,7 @@ setup() {
 teardown() {
   rm -f "$CONFIG_TMP"
   unset NODE_RECORDER_CONFIG PROMETHEUS_URL ALERT_NAME NODE_ID ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
+  unset INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
 }
 
 @test "load_config succeeds when required vars are present" {
@@ -14,6 +15,7 @@ teardown() {
 PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
@@ -26,6 +28,7 @@ EOF
 PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
@@ -37,6 +40,13 @@ EOF
   [ "$COOLDOWN_SECONDS" = "900" ]
   [ "$STATE_DIR" = "/var/lib/node-recorder/state" ]
   [ "$LOCK_FILE" = "/run/node-recorder.lock" ]
+  [ "$INCIDENTS_DIR" = "/var/lib/node-recorder/incidents" ]
+  [ "$STABLEVISOR_SERVICE_NAME" = "stablevisor" ]
+  [ "$PPROF_URL" = "http://127.0.0.1:6060/debug/pprof" ]
+  [ "$CPU_PROFILE_SECONDS" = "20" ]
+  [ "$HAPROXY_LOG" = "/var/log/haproxy.log" ]
+  [ "$LOG_WINDOW_BEFORE_SECONDS" = "600" ]
+  [ "$HAPROXY_LOG_MAX_BYTES" = "209715200" ]
 }
 
 @test "load_config fails when a required variable is missing" {
@@ -47,6 +57,19 @@ EOF
 
   run load_config
   [ "$status" -eq 1 ]
+}
+
+@test "load_config fails when STABLEVISOR_SNAPSHOT_BASE_DIR is missing" {
+  cat > "$CONFIG_TMP" <<'EOF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+EOF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  run load_config
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"STABLEVISOR_SNAPSHOT_BASE_DIR"* ]]
 }
 
 @test "load_config fails when a required dependency is missing from PATH" {

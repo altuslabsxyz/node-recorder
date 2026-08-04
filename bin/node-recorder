@@ -11,11 +11,46 @@ source "${SCRIPT_DIR}/lib/config.sh"
 source "${SCRIPT_DIR}/lib/prometheus.sh"
 # shellcheck source=lib/state.sh
 source "${SCRIPT_DIR}/lib/state.sh"
+# shellcheck source=lib/incident.sh
+source "${SCRIPT_DIR}/lib/incident.sh"
 
-start_capture() {
+# run_capture <node> <alertname>
+# Runs Capture Flow steps 4-8 from docs/spec/node-recorder.md synchronously,
+# holding the run lock for the duration: creates the incident working
+# directory, then runs the Stablevisor/pprof and HAProxy capture scripts,
+# which record per-artifact outcomes in the incident directory's results.tsv.
+# Always returns 0: this file runs under `set -e`, and a failed collection
+# must never take the watcher down with it. Manifest, S3 upload, Slack
+# notification, and cleanup (steps 9-12) are separate tickets. The *_BIN
+# variables exist so tests can substitute the capture scripts.
+run_capture() {
   local node="$1"
   local alertname="$2"
-  log_info "would start capture for node=${node} alertname=${alertname} (capture flow not yet implemented)"
+  local stablevisor_pprof_bin="${CAPTURE_STABLEVISOR_PPROF_BIN:-${SCRIPT_DIR}/bin/capture-stablevisor-pprof.sh}"
+  local haproxy_log_bin="${CAPTURE_HAPROXY_LOG_BIN:-${SCRIPT_DIR}/bin/capture-haproxy-log.sh}"
+
+  local triggered_at_epoch
+  triggered_at_epoch="$(date +%s)"
+
+  # block_lag is the MVP's only trigger; CPU/RAM/disk triggers are deferred.
+  local incident_dir
+  if ! incident_dir="$(incident_create "$INCIDENTS_DIR" "block_lag")"; then
+    log_error "run_capture: could not create an incident directory under ${INCIDENTS_DIR}, skipping collection for node=${node} alertname=${alertname}"
+    return 0
+  fi
+
+  log_info "run_capture: node=${node} alertname=${alertname} collecting into ${incident_dir}"
+
+  # Order matters beyond the spec's step numbering: the stablevisor/pprof
+  # script truncates results.tsv as its own initialization, while the haproxy
+  # script appends, so running haproxy first would have its result wiped.
+  "$stablevisor_pprof_bin" "$incident_dir" \
+    || log_error "run_capture: ${stablevisor_pprof_bin} exited $?"
+  "$haproxy_log_bin" "$incident_dir" "$triggered_at_epoch" \
+    || log_error "run_capture: ${haproxy_log_bin} exited $?"
+
+  log_info "run_capture: done, results in ${incident_dir}/results.tsv"
+  return 0
 }
 
 poll_once() {
@@ -36,7 +71,7 @@ poll_once() {
         log_info "node=${NODE_ID} alertname=${ALERT_NAME} is firing but in cooldown, skipping"
       else
         set_state "$NODE_ID" "$ALERT_NAME" "capturing" 0
-        start_capture "$NODE_ID" "$ALERT_NAME"
+        run_capture "$NODE_ID" "$ALERT_NAME"
         set_state "$NODE_ID" "$ALERT_NAME" "cooldown" "$(( $(date +%s) + COOLDOWN_SECONDS ))"
       fi
       ;;

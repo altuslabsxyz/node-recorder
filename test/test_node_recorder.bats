@@ -23,7 +23,7 @@ setup() {
   source "${NODE_RECORDER_HOME}/bin/node-recorder"
 
   CAPTURE_LOG="$(mktemp)"
-  start_capture() { echo "captured:$1:$2" >> "$CAPTURE_LOG"; }
+  run_capture() { echo "captured:$1:$2" >> "$CAPTURE_LOG"; }
 }
 
 teardown() {
@@ -31,7 +31,7 @@ teardown() {
   rm -f "$LOCK_FILE" "$CAPTURE_LOG"
 }
 
-@test "poll_once calls start_capture and enters cooldown when alert is firing" {
+@test "poll_once calls run_capture and enters cooldown when alert is firing" {
   export CURL_FIXTURE=firing
 
   poll_once

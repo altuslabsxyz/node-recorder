@@ -41,3 +41,12 @@ assert_file_absent() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
   fi
 }
+
+assert_dir_exists() {
+  local path="$1" msg="${2:-assert_dir_exists}"
+  TESTS_RUN=$((TESTS_RUN + 1))
+  if [[ ! -d "$path" ]]; then
+    echo "FAIL: $msg (expected directory to exist: $path)" >&2
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
