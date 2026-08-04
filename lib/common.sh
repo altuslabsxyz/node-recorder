@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# lib/common.sh - logging and result-recording helpers shared by lib/*.sh.
+# lib/common.sh - result-recording helper shared by lib/*.sh. Logging lives in
+# lib/log.sh, sourced here so callers get log_info/log_error from one place.
 
-log_info() {
-  printf '[%s] INFO: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
-}
-
-log_error() {
-  printf '[%s] ERROR: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
-}
+source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
 
 # record_result <results_file> <artifact_key> <ok|error> [reason]
 # Appends one TSV line to results_file. This is a plain interchange format

@@ -15,4 +15,8 @@ line2="$(sed -n '2p' "$results_file")"
 assert_eq "$(printf 'cpu_profile\tok\t')" "$line1" "ok result has empty reason field"
 assert_eq "$(printf 'heap_profile\terror\ttimeout after 10s')" "$line2" "error result includes reason"
 
+assert_eq "function" "$(type -t log_info)" "common.sh provides log_info via log.sh"
+assert_eq "function" "$(type -t log_error)" "common.sh provides log_error via log.sh"
+assert_eq "" "$(log_info "noise" 2>/dev/null)" "log_info writes nothing to stdout, keeping it free as a return channel"
+
 rm -rf "$tmp_dir"
