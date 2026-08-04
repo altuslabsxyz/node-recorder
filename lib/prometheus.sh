@@ -42,7 +42,7 @@ query_alert_state() {
   fi
 
   if grep -qx "pending" <<<"$states"; then
-    log_info "alert ${ALERT_NAME} for ${NODE_ID} is pending, not firing - excluded" >&2
+    log_info "alert ${ALERT_NAME} for ${NODE_ID} is pending, not firing - excluded"
     echo "pending"
     return 0
   fi
