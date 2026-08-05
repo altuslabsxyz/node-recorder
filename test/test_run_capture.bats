@@ -37,7 +37,7 @@ EOF
 teardown() {
   rm -rf "$INCIDENTS_DIR" "$FAKE_BIN_DIR"
   rm -f "$CALL_LOG" "$FAKE_AWS_LOG" "${SLACK_LOG:-}"
-  unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT FAKE_AWS_EXIT SLACK_WEBHOOK_URL
+  unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT FAKE_AWS_EXIT SLACK_WEBHOOK_URL LOCAL_RETENTION_COUNT
 }
 
 @test "run_capture creates an incident dir and runs both capture scripts against it, in order" {
@@ -100,6 +100,21 @@ teardown() {
 
   grep -q "$SLACK_WEBHOOK_URL" "$SLACK_LOG"
   unset -f curl
+}
+
+@test "run_capture prunes older uploaded bundles per LOCAL_RETENTION_COUNT after the upload" {
+  old_bundle="$INCIDENTS_DIR/20200101T000000Z-block-lag"
+  mkdir -p "$old_bundle"
+  echo '{}' > "$old_bundle/manifest.json"
+  touch "$old_bundle/.uploaded"
+  export LOCAL_RETENTION_COUNT=1
+
+  run run_capture "node-a" "AlertX"
+  [ "$status" -eq 0 ]
+
+  [ ! -d "$old_bundle" ]
+  new_bundle="$(find "$INCIDENTS_DIR" -mindepth 1 -maxdepth 1 -type d)"
+  [ -f "$new_bundle/.uploaded" ]
 }
 
 @test "run_capture passes the trigger time to the haproxy capture as an epoch near now" {
