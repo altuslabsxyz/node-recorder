@@ -48,6 +48,18 @@ load_config() {
     return 1
   fi
 
+  # Numeric settings feed sleep and bash arithmetic; a non-numeric value
+  # would otherwise kill the daemon at its first use (a crash loop via
+  # Restart=always, or a death at the first incident) instead of failing
+  # startup with a message that names the offending variable.
+  local num_var
+  for num_var in POLL_INTERVAL_SECONDS COOLDOWN_SECONDS PROMETHEUS_TIMEOUT_SECONDS CPU_PROFILE_SECONDS LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES S3_UPLOAD_MAX_ATTEMPTS; do
+    if [[ ! "${!num_var}" =~ ^[0-9]+$ ]]; then
+      log_error "config value must be a whole number of seconds/bytes/attempts: ${num_var}='${!num_var}'"
+      return 1
+    fi
+  done
+
   local dep
   for dep in jq flock curl zcat tar aws; do
     if ! command -v "$dep" >/dev/null 2>&1; then
