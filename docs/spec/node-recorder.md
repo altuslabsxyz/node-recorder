@@ -195,6 +195,12 @@ POLL_INTERVAL_SECONDS="15"
 COOLDOWN_SECONDS="900"
 
 STABLEVISOR_SERVICE_NAME="stablevisor"
+# Where this host's Stablevisor writes its incident snapshots. No default;
+# required, validated at daemon startup.
+STABLEVISOR_SNAPSHOT_BASE_DIR="<stablevisor incident snapshot dir>"
+
+# Local working directory for incident bundles (Capture Flow step 4).
+INCIDENTS_DIR="/var/lib/node-recorder/incidents"
 
 PPROF_URL="http://127.0.0.1:6060/debug/pprof"
 CPU_PROFILE_SECONDS="20"
