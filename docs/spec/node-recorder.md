@@ -225,6 +225,7 @@ LOG_WINDOW_BEFORE_SECONDS="600"
 HAPROXY_LOG_MAX_BYTES="209715200"
 
 S3_PREFIX="s3://altuslabs-node-recorder/node-recorder"
+S3_UPLOAD_MAX_ATTEMPTS="5"
 
 SLACK_WEBHOOK_URL="<secret>"
 ```
@@ -232,6 +233,14 @@ SLACK_WEBHOOK_URL="<secret>"
 `BLOCK_LAG_THRESHOLD_BLOCKS` is applied on the Prometheus alert rule side and is `40` for `chain="stable"`. Node Recorder does not re-evaluate this threshold itself; the value here is documentation, not enforcement.
 
 Real secrets (including `SLACK_WEBHOOK_URL`) must not be committed to the script. On AWS, prefer the instance role. The authentication method for any other environment is decided separately.
+
+## S3 Upload
+
+Decision: each incident uploads as a single object, `${S3_PREFIX}/${CHAIN}/${NODE_ID}/<incident id>.tar.gz`. The Components table calls S3's content "the compressed incident bundle", and one object per incident keeps the IAM policy at plain `PutObject` (with `AbortMultipartUpload` for large bundles) — the Incident Bundle tree above describes the paths *inside* the tarball, not loose S3 objects.
+
+Decision: retry state lives next to the bundle. A successful upload writes an `.uploaded` marker (containing the S3 URI) inside the incident directory; each attempt increments an `.upload-attempts` counter, and after `S3_UPLOAD_MAX_ATTEMPTS` failed attempts the incident is skipped rather than retried forever. The pending scan retries every incident directory that has no `.uploaded` marker on each run, which implements the failure-handling row "local bundle is kept, retried with a limited retry count on the next run". The scan only considers directories that already contain `manifest.json` — run_capture writes it last, so it doubles as the bundle's completion marker (the same contract Stablevisor's `.complete` file provides) and keeps a half-captured bundle from being uploaded and marked done. These `.upload*` files are excluded from the tarball itself.
+
+Decision: a failed attempt keeps the built tarball and reuses it on the next attempt — the bundle directory is immutable once capture finishes, so rebuilding (re-compressing up to hundreds of MB) would only burn CPU. The tarball is deleted after a successful upload; the bundle directory itself is removed later by the retention step (Capture Flow step 12), not by the uploader.
 
 ## S3 Upload Permissions
 
