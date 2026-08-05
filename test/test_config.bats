@@ -141,3 +141,19 @@ CONF
   [ "$status" -eq 1 ]
   [[ "$output" == *"COOLDOWN_SECONDS"* ]]
 }
+
+@test "load_config rejects a numeric setting with a leading zero (bash reads it as octal)" {
+  cat > "$CONFIG_TMP" <<'CONF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+COOLDOWN_SECONDS="0900"
+CONF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  run load_config
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"COOLDOWN_SECONDS"* ]]
+}

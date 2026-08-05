@@ -51,10 +51,12 @@ load_config() {
   # Numeric settings feed sleep and bash arithmetic; a non-numeric value
   # would otherwise kill the daemon at its first use (a crash loop via
   # Restart=always, or a death at the first incident) instead of failing
-  # startup with a message that names the offending variable.
+  # startup with a message that names the offending variable. Leading zeros
+  # are rejected too: bash arithmetic reads them as octal, which either dies
+  # ("0900") or silently computes the wrong number ("020" is 16).
   local num_var
   for num_var in POLL_INTERVAL_SECONDS COOLDOWN_SECONDS PROMETHEUS_TIMEOUT_SECONDS CPU_PROFILE_SECONDS LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES S3_UPLOAD_MAX_ATTEMPTS; do
-    if [[ ! "${!num_var}" =~ ^[0-9]+$ ]]; then
+    if [[ ! "${!num_var}" =~ ^(0|[1-9][0-9]*)$ ]]; then
       log_error "config value must be a whole number of seconds/bytes/attempts: ${num_var}='${!num_var}'"
       return 1
     fi
