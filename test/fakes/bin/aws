@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# test/fakes/bin/aws - stands in for `aws s3 cp <src> <uri>` in tests.
+# Appends the full invocation to $FAKE_AWS_LOG (one line per call, "$*"),
+# records whether the source file existed at call time as a trailing
+# " src_exists=yes|no" field, and exits FAKE_AWS_EXIT (default 0).
+
+src="${*: -2:1}"
+if [[ -f "$src" ]]; then src_exists="yes"; else src_exists="no"; fi
+printf '%s src_exists=%s\n' "$*" "$src_exists" >> "${FAKE_AWS_LOG:?FAKE_AWS_LOG is required}"
+exit "${FAKE_AWS_EXIT:-0}"
