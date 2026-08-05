@@ -23,6 +23,8 @@ load_config() {
   : "${HAPROXY_LOG:=/var/log/haproxy.log}"
   : "${LOG_WINDOW_BEFORE_SECONDS:=600}"
   : "${HAPROXY_LOG_MAX_BYTES:=209715200}"
+  : "${S3_PREFIX:=s3://altuslabs-node-recorder/node-recorder}"
+  : "${S3_UPLOAD_MAX_ATTEMPTS:=5}"
   # Empty height queries are a valid operator choice: the manifest records
   # null heights with a warning instead of failing (see the spec's Manifest
   # decisions).
@@ -46,7 +48,7 @@ load_config() {
   fi
 
   local dep
-  for dep in jq flock curl zcat; do
+  for dep in jq flock curl zcat tar aws; do
     if ! command -v "$dep" >/dev/null 2>&1; then
       log_error "required dependency not found on PATH: $dep"
       return 1
@@ -55,6 +57,6 @@ load_config() {
 
   export PROMETHEUS_URL ALERT_NAME NODE_ID CHAIN ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
-  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
+  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS
   return 0
 }
