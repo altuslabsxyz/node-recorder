@@ -8,6 +8,7 @@ teardown() {
   rm -f "$CONFIG_TMP"
   unset NODE_RECORDER_CONFIG PROMETHEUS_URL ALERT_NAME NODE_ID ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   unset INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
+  unset CHAIN LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
 }
 
 @test "load_config succeeds when required vars are present" {
@@ -15,6 +16,7 @@ teardown() {
 PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
@@ -28,6 +30,7 @@ EOF
 PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
@@ -47,6 +50,8 @@ EOF
   [ "$HAPROXY_LOG" = "/var/log/haproxy.log" ]
   [ "$LOG_WINDOW_BEFORE_SECONDS" = "600" ]
   [ "$HAPROXY_LOG_MAX_BYTES" = "209715200" ]
+  [ -z "$LOCAL_HEIGHT_QUERY" ]
+  [ -z "$NETWORK_TIP_HEIGHT_QUERY" ]
 }
 
 @test "load_config fails when a required variable is missing" {
@@ -64,6 +69,7 @@ EOF
 PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
@@ -82,4 +88,18 @@ EOF
 
   PATH="" run load_config
   [ "$status" -eq 1 ]
+}
+
+@test "load_config fails when CHAIN is missing" {
+  cat > "$CONFIG_TMP" <<'CONF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+CONF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  run load_config
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CHAIN"* ]]
 }

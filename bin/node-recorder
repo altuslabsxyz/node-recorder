@@ -13,16 +13,19 @@ source "${SCRIPT_DIR}/lib/prometheus.sh"
 source "${SCRIPT_DIR}/lib/state.sh"
 # shellcheck source=lib/incident.sh
 source "${SCRIPT_DIR}/lib/incident.sh"
+# shellcheck source=lib/manifest.sh
+source "${SCRIPT_DIR}/lib/manifest.sh"
 
 # run_capture <node> <alertname>
-# Runs Capture Flow steps 4-8 from docs/spec/node-recorder.md synchronously,
+# Runs Capture Flow steps 4-9 from docs/spec/node-recorder.md synchronously,
 # holding the run lock for the duration: creates the incident working
-# directory, then runs the Stablevisor/pprof and HAProxy capture scripts,
-# which record per-artifact outcomes in the incident directory's results.tsv.
-# Always returns 0: this file runs under `set -e`, and a failed collection
-# must never take the watcher down with it. Manifest, S3 upload, Slack
-# notification, and cleanup (steps 9-12) are separate tickets. The *_BIN
-# variables exist so tests can substitute the capture scripts.
+# directory, runs the Stablevisor/pprof and HAProxy capture scripts, which
+# record per-artifact outcomes in the incident directory's results.tsv, then
+# writes manifest.json from those outcomes. Always returns 0: this file runs
+# under `set -e`, and a failed collection must never take the watcher down
+# with it. S3 upload, Slack notification, and cleanup (steps 10-12) are
+# separate tickets. The *_BIN variables exist so tests can substitute the
+# capture scripts.
 run_capture() {
   local node="$1"
   local alertname="$2"
@@ -49,7 +52,10 @@ run_capture() {
   "$haproxy_log_bin" "$incident_dir" "$triggered_at_epoch" \
     || log_error "run_capture: ${haproxy_log_bin} exited $?"
 
-  log_info "run_capture: done, results in ${incident_dir}/results.tsv"
+  manifest_write "$incident_dir" "$node" "$CHAIN" "block_lag" "$triggered_at_epoch" \
+    || log_error "run_capture: manifest_write failed for ${incident_dir}"
+
+  log_info "run_capture: done, manifest at ${incident_dir}/manifest.json"
   return 0
 }
 

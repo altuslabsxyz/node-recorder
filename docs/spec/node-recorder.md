@@ -187,6 +187,8 @@ Decision: apply an overall size cap via `HAPROXY_LOG_MAX_BYTES` (default `209715
 
 ```bash
 NODE_ID="main-stable-archive-ovh-de"
+# Labels the manifest and, later, the S3 bundle path. Required, validated at
+# daemon startup.
 CHAIN="stable"
 
 # Prometheus alert rule (informational only, owned by the alert rule)

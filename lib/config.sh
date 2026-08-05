@@ -23,14 +23,21 @@ load_config() {
   : "${HAPROXY_LOG:=/var/log/haproxy.log}"
   : "${LOG_WINDOW_BEFORE_SECONDS:=600}"
   : "${HAPROXY_LOG_MAX_BYTES:=209715200}"
+  # Empty height queries are a valid operator choice: the manifest records
+  # null heights with a warning instead of failing (see the spec's Manifest
+  # decisions).
+  : "${LOCAL_HEIGHT_QUERY:=}"
+  : "${NETWORK_TIP_HEIGHT_QUERY:=}"
 
   # STABLEVISOR_SNAPSHOT_BASE_DIR has no sensible default: it is wherever this
-  # host's Stablevisor writes its incident snapshots. Validating it here means
-  # a deployment mistake fails at daemon startup, not at the first incident.
+  # host's Stablevisor writes its incident snapshots. CHAIN labels the
+  # manifest (and, later, the S3 bundle path). Validating them here means a
+  # deployment mistake fails at daemon startup, not at the first incident.
   local missing=()
   [[ -z "${PROMETHEUS_URL:-}" ]] && missing+=("PROMETHEUS_URL")
   [[ -z "${ALERT_NAME:-}" ]] && missing+=("ALERT_NAME")
   [[ -z "${NODE_ID:-}" ]] && missing+=("NODE_ID")
+  [[ -z "${CHAIN:-}" ]] && missing+=("CHAIN")
   [[ -z "${STABLEVISOR_SNAPSHOT_BASE_DIR:-}" ]] && missing+=("STABLEVISOR_SNAPSHOT_BASE_DIR")
 
   if [[ ${#missing[@]} -gt 0 ]]; then
@@ -46,7 +53,8 @@ load_config() {
     fi
   done
 
-  export PROMETHEUS_URL ALERT_NAME NODE_ID ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
+  export PROMETHEUS_URL ALERT_NAME NODE_ID CHAIN ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
+  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
   return 0
 }

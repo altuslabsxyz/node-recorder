@@ -2,6 +2,11 @@ setup() {
   NODE_RECORDER_HOME="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
   source "${NODE_RECORDER_HOME}/bin/node-recorder"
 
+  # run_capture's manifest step reads these; unset height queries keep it
+  # from talking to Prometheus.
+  export CHAIN="stable"
+  unset LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
+
   export INCIDENTS_DIR="$(mktemp -d)"
   CALL_LOG="$(mktemp)"
   export CALL_LOG
@@ -41,6 +46,19 @@ teardown() {
   line2="$(sed -n '2p' "$CALL_LOG")"
   [ "$line1" = "stablevisor-pprof $incident_dir" ]
   [[ "$line2" =~ ^haproxy-log\ $incident_dir\ [0-9]+$ ]]
+}
+
+@test "run_capture writes a manifest for the incident after the captures" {
+  run run_capture "node-a" "AlertX"
+  [ "$status" -eq 0 ]
+
+  incident_dir="$(find "$INCIDENTS_DIR" -mindepth 1 -maxdepth 1 -type d)"
+  m="$incident_dir/manifest.json"
+  [ -f "$m" ]
+  [ "$(jq -r '.incident_id' "$m")" = "$(basename "$incident_dir")" ]
+  [ "$(jq -r '.node' "$m")" = "node-a" ]
+  [ "$(jq -r '.chain' "$m")" = "stable" ]
+  [ "$(jq -r '.trigger' "$m")" = "block_lag" ]
 }
 
 @test "run_capture passes the trigger time to the haproxy capture as an epoch near now" {
