@@ -9,7 +9,7 @@ query_first_value() {
   local query="$1"
   local raw
 
-  if ! raw=$(curl -sS -G --data-urlencode "query=${query}" -w '\n%{http_code}' "${PROMETHEUS_URL}/api/v1/query" 2>&1); then
+  if ! raw=$(curl -sS -G --max-time "${PROMETHEUS_TIMEOUT_SECONDS:-10}" --data-urlencode "query=${query}" -w '\n%{http_code}' "${PROMETHEUS_URL}/api/v1/query" 2>&1); then
     log_error "prometheus query failed: ${raw}"
     return 1
   fi
@@ -43,7 +43,7 @@ query_alert_state() {
   local query="ALERTS{alertname=\"${ALERT_NAME}\", ${ALERT_NODE_LABEL}=\"${NODE_ID}\"}"
   local raw
 
-  if ! raw=$(curl -sS -G --data-urlencode "query=${query}" -w '\n%{http_code}' "${PROMETHEUS_URL}/api/v1/query" 2>&1); then
+  if ! raw=$(curl -sS -G --max-time "${PROMETHEUS_TIMEOUT_SECONDS:-10}" --data-urlencode "query=${query}" -w '\n%{http_code}' "${PROMETHEUS_URL}/api/v1/query" 2>&1); then
     log_error "prometheus query failed: ${raw}"
     echo "error"
     return 1
