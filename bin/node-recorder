@@ -17,17 +17,20 @@ source "${SCRIPT_DIR}/lib/incident.sh"
 source "${SCRIPT_DIR}/lib/manifest.sh"
 # shellcheck source=lib/s3.sh
 source "${SCRIPT_DIR}/lib/s3.sh"
+# shellcheck source=lib/slack.sh
+source "${SCRIPT_DIR}/lib/slack.sh"
 
 # run_capture <node> <alertname>
-# Runs Capture Flow steps 4-10 from docs/spec/node-recorder.md synchronously,
+# Runs Capture Flow steps 4-11 from docs/spec/node-recorder.md synchronously,
 # holding the run lock for the duration: creates the incident working
 # directory, runs the Stablevisor/pprof and HAProxy capture scripts, which
 # record per-artifact outcomes in the incident directory's results.tsv,
 # writes manifest.json from those outcomes, then uploads every pending
 # bundle (this incident's and any earlier ones whose upload failed -- the
-# spec's "retried on the next run"). Always returns 0: this file runs under
-# `set -e`, and a failed collection must never take the watcher down with
-# it. Slack notification and cleanup (steps 11-12) are separate tickets.
+# spec's "retried on the next run"), then posts the incident summary to
+# Slack. Always returns 0: this file runs under `set -e`, and a failed
+# collection must never take the watcher down with it. Cleanup (step 12) is
+# a separate ticket.
 # The *_BIN variables exist so tests can substitute the capture scripts.
 run_capture() {
   local node="$1"
@@ -60,6 +63,9 @@ run_capture() {
 
   s3_upload_pending "$INCIDENTS_DIR" \
     || log_error "run_capture: pending-upload scan failed for ${INCIDENTS_DIR}"
+
+  slack_notify_incident "$incident_dir" \
+    || log_error "run_capture: slack notification failed for ${incident_dir}"
 
   log_info "run_capture: done, manifest at ${incident_dir}/manifest.json"
   return 0

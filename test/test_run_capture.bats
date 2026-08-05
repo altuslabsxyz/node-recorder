@@ -36,8 +36,8 @@ EOF
 
 teardown() {
   rm -rf "$INCIDENTS_DIR" "$FAKE_BIN_DIR"
-  rm -f "$CALL_LOG" "$FAKE_AWS_LOG"
-  unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT FAKE_AWS_EXIT
+  rm -f "$CALL_LOG" "$FAKE_AWS_LOG" "${SLACK_LOG:-}"
+  unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT FAKE_AWS_EXIT SLACK_WEBHOOK_URL
 }
 
 @test "run_capture creates an incident dir and runs both capture scripts against it, in order" {
@@ -88,6 +88,20 @@ teardown() {
   [ "$(cat "$incident_dir/.upload-attempts")" = "1" ]
 }
 
+@test "run_capture notifies slack after the upload when a webhook is configured" {
+  export SLACK_WEBHOOK_URL="https://hooks.slack.test/services/T000/B000/XXX"
+  SLACK_LOG="$(mktemp)"
+  export SLACK_LOG
+  curl() { printf '%s\n' "$*" >> "$SLACK_LOG"; printf '200'; }
+  export -f curl
+
+  run run_capture "node-a" "AlertX"
+  [ "$status" -eq 0 ]
+
+  grep -q "$SLACK_WEBHOOK_URL" "$SLACK_LOG"
+  unset -f curl
+}
+
 @test "run_capture passes the trigger time to the haproxy capture as an epoch near now" {
   before="$(date +%s)"
   run_capture "node-a" "AlertX"
@@ -124,6 +138,8 @@ teardown() {
   # SURVIVED.
   export FAKE_STABLEVISOR_PPROF_EXIT=1
   export FAKE_AWS_EXIT=1
+  # Connection refused instantly: the slack notification fails too.
+  export SLACK_WEBHOOK_URL="http://127.0.0.1:1/hook"
 
   run bash -c "source '${NODE_RECORDER_HOME}/bin/node-recorder'; run_capture node-a AlertX >/dev/null 2>&1; echo SURVIVED"
   [ "$status" -eq 0 ]
