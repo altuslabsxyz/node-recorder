@@ -138,23 +138,29 @@ node-recorder/
   "node": "main-stable-archive-ovh-de",
   "chain": "stable",
   "trigger": "block_lag",
-  "triggered_at": "2026-07-31T09:07:00+09:00",
+  "triggered_at": "2026-07-31T00:07:00Z",
   "local_height": 1234000,
   "network_tip_height": 1234082,
   "lag_blocks": 82,
   "stablevisor_incident_id": "incident-20260731-090700-123456",
   "artifacts": {
+    "stablevisor_snapshot": "ok",
     "cpu_profile": "ok",
     "heap_profile": "ok",
     "goroutine_profile": "ok",
     "mutex_profile": "ok",
     "haproxy_log": "ok"
   },
-  "errors": []
+  "errors": [],
+  "warnings": []
 }
 ```
 
-If some artifact collection fails, the upload of the remaining data still proceeds. Failures are recorded in `errors`.
+If some artifact collection fails, the upload of the remaining data still proceeds. Failures are recorded in `errors`. Manifest timestamps are UTC.
+
+Decision: `local_height` and `network_tip_height` come from two operator-supplied PromQL queries (`LOCAL_HEIGHT_QUERY`, `NETWORK_TIP_HEIGHT_QUERY`, see Configuration). The exact height metric names live in the alert rule file (`stablebft_alert_rules.yml`), outside this repository, and may differ per network — injecting whole queries keeps the metric names managed with the rest of the monitoring config, the same reasoning that made `ALERT_NODE_LABEL` configurable. When a query is unset the corresponding field is `null` and a note lands in `warnings`; when a configured query fails the field is `null` and the failure lands in `errors`. `lag_blocks` is computed only when both heights resolve.
+
+Decision: artifacts that succeed with a caveat are surfaced in a `warnings` array, separate from `errors` — this resolves the HAProxy Logging Policy note that size-cap truncation "is recorded so a future manifest-writing step can surface it". `stablevisor_incident_id` is read from the `stablevisor_snapshot` row of `results.tsv`, whose reason column carries the snapshot directory name on success; it is `null` when the snapshot failed.
 
 ## HAProxy Logging Policy
 
@@ -181,6 +187,8 @@ Decision: apply an overall size cap via `HAPROXY_LOG_MAX_BYTES` (default `209715
 
 ```bash
 NODE_ID="main-stable-archive-ovh-de"
+# Labels the manifest and, later, the S3 bundle path. Required, validated at
+# daemon startup.
 CHAIN="stable"
 
 # Prometheus alert rule (informational only, owned by the alert rule)
@@ -193,6 +201,13 @@ ALERT_STATE="firing"
 ALERT_NODE_LABEL="instance"
 POLL_INTERVAL_SECONDS="15"
 COOLDOWN_SECONDS="900"
+
+# PromQL for the manifest's height fields. The height metric names live in
+# the alert rule file, not here, so the whole query is injected rather than
+# hardcoded. This file is sourced, so queries may reference $NODE_ID. Unset
+# queries leave the heights null in the manifest.
+LOCAL_HEIGHT_QUERY=""
+NETWORK_TIP_HEIGHT_QUERY=""
 
 STABLEVISOR_SERVICE_NAME="stablevisor"
 # Where this host's Stablevisor writes its incident snapshots. No default;
