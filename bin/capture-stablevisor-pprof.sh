@@ -33,7 +33,17 @@ mkdir -p "$pprof_out_dir"
 
 snapshot_dir_name=""
 if stablevisor_trigger_snapshot "$stablevisor_snapshot_base_dir" snapshot_dir_name; then
-  record_result "$results_file" "stablevisor_snapshot" "ok" "$snapshot_dir_name"
+  # The bundle must be self-contained: stablevisor's own copy is rotated away
+  # by its retention (10 incidents / 10GB, spec's Stablevisor Signal and
+  # Snapshot section), so the snapshot goes INTO the bundle under
+  # stablevisor/<id>/ per the spec's Incident Bundle tree. Copied, not moved:
+  # the incidents directory is stablevisor's own bookkeeping.
+  if mkdir -p "$incident_dir/stablevisor" \
+      && cp -a "$stablevisor_snapshot_base_dir/$snapshot_dir_name" "$incident_dir/stablevisor/"; then
+    record_result "$results_file" "stablevisor_snapshot" "ok" "$snapshot_dir_name"
+  else
+    record_result "$results_file" "stablevisor_snapshot" "error" "snapshot ${snapshot_dir_name} confirmed but copying it into the bundle failed"
+  fi
 else
   record_result "$results_file" "stablevisor_snapshot" "error" "trigger or confirmation failed"
 fi
