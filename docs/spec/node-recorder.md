@@ -274,6 +274,8 @@ Attach this to the instance role (per the AWS preference above) rather than issu
 
 ## Slack Notification
 
+Decision: an unset `SLACK_WEBHOOK_URL` logs a warning and skips the notification. It is best-effort by design: environments without a webhook (development, staging) must still run, and a notification failure must never fail the capture. The notification is sent even when the S3 upload failed — "captured but stuck on this host" is exactly what an operator needs to hear — with the upload state marked in the message.
+
 Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST per incident (S3 location plus collection result summary) fits a post-only, single-channel use case. No message editing, reactions, or channel listing is needed, so the extra scope and setup of a full bot integration isn't justified. The webhook URL is a secret and follows the same handling as `SLACK_WEBHOOK_URL` above: not committed to the script, injected at deploy time.
 
 ## Runtime and Deployment
