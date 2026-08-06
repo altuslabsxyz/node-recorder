@@ -23,7 +23,7 @@ load_config() {
   : "${HAPROXY_LOG:=/var/log/haproxy.log}"
   : "${LOG_WINDOW_BEFORE_SECONDS:=600}"
   : "${HAPROXY_LOG_MAX_BYTES:=209715200}"
-  : "${S3_PREFIX:=s3://altuslabs-node-recorder/node-recorder}"
+  : "${S3_PREFIX:=s3://node-recorder-snapshot}"
   : "${S3_UPLOAD_MAX_ATTEMPTS:=5}"
   # Empty height queries are a valid operator choice: the manifest records
   # null heights with a warning instead of failing (see the spec's Manifest
@@ -51,6 +51,9 @@ load_config() {
   for dep in jq flock curl zcat tar aws; do
     if ! command -v "$dep" >/dev/null 2>&1; then
       log_error "required dependency not found on PATH: $dep"
+      if [[ "$dep" == "aws" ]]; then
+        log_error "install the AWS CLI v2 before starting the daemon: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+      fi
       return 1
     fi
   done

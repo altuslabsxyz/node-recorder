@@ -224,7 +224,7 @@ HAPROXY_LOG="/var/log/haproxy.log"
 LOG_WINDOW_BEFORE_SECONDS="600"
 HAPROXY_LOG_MAX_BYTES="209715200"
 
-S3_PREFIX="s3://altuslabs-node-recorder/node-recorder"
+S3_PREFIX="s3://node-recorder-snapshot"
 S3_UPLOAD_MAX_ATTEMPTS="5"
 
 SLACK_WEBHOOK_URL="<secret>"
@@ -246,7 +246,7 @@ Decision: a failed attempt keeps the built tarball and reuses it on the next att
 
 ## S3 Upload Permissions
 
-Bucket: `altuslabs-node-recorder`. The policy below grants only what the upload step needs, write access under `node-recorder/`, no read, no delete, no bucket-level permissions.
+Bucket: `node-recorder-snapshot`. The policy below grants only what the upload step needs, write access under `node-recorder/`, no read, no delete, no bucket-level permissions.
 
 ```json
 {
@@ -259,7 +259,7 @@ Bucket: `altuslabs-node-recorder`. The policy below grants only what the upload 
         "s3:PutObject",
         "s3:AbortMultipartUpload"
       ],
-      "Resource": "arn:aws:s3:::altuslabs-node-recorder/node-recorder/*"
+      "Resource": "arn:aws:s3:::node-recorder-snapshot/*"
     }
   ]
 }
@@ -290,6 +290,7 @@ Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST p
 - `NoNewPrivileges=true`
 - read-only filesystem outside the local incident directory
 - local artifacts are cleaned up according to the configured retention after a successful S3 upload
+- the host provides `jq`, `flock`, `curl`, `zcat`, `tar`, and the AWS CLI v2 — installed by the deployment role, and `load_config` fails fast at startup with an install hint when one is missing
 - deployed identically to Full Archive and RPC nodes through an Ansible role
 
 ## Failure Handling

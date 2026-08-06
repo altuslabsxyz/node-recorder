@@ -55,7 +55,7 @@ EOF
   [ "$HAPROXY_LOG_MAX_BYTES" = "209715200" ]
   [ -z "$LOCAL_HEIGHT_QUERY" ]
   [ -z "$NETWORK_TIP_HEIGHT_QUERY" ]
-  [ "$S3_PREFIX" = "s3://altuslabs-node-recorder/node-recorder" ]
+  [ "$S3_PREFIX" = "s3://node-recorder-snapshot" ]
   [ "$S3_UPLOAD_MAX_ATTEMPTS" = "5" ]
 }
 
