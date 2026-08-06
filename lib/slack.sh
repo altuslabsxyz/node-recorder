@@ -35,6 +35,72 @@ _slack_build_text() {
     $upload' "$manifest"
 }
 
+# _slack_build_payload <incident_dir>
+# Prints the full webhook JSON: a single color-coded Block Kit attachment,
+# with no top-level text (it would render as a duplicate line above the
+# attachment). The attachment "fallback" carries a one-line summary for push
+# notifications and clients that do not render blocks. Color reflects
+# collection health: red when any artifact failed or the upload is pending,
+# yellow when there are warnings, green when everything landed. A missing or
+# corrupt manifest degrades to the plain-text payload from
+# _slack_build_text.
+_slack_build_payload() {
+  local incident_dir="$1"
+  local manifest="$incident_dir/manifest.json"
+
+  if ! jq -e . "$manifest" >/dev/null 2>&1; then
+    jq -cn --arg text "$(_slack_build_text "$incident_dir")" '{text: $text}'
+    return 0
+  fi
+
+  local upload_line color
+  if [[ -f "$incident_dir/.uploaded" ]]; then
+    upload_line=":package: uploaded: \`$(cat "$incident_dir/.uploaded")\`"
+    color="good"
+  else
+    upload_line=":hourglass_flowing_sand: upload PENDING - bundle kept at \`${incident_dir}\`"
+    color="danger"
+  fi
+  if [[ "$color" == "good" ]]; then
+    if jq -e '((.errors // []) | length) > 0 or ([(.artifacts // {})[]] | any(. != "ok"))' "$manifest" >/dev/null; then
+      color="danger"
+    elif jq -e '((.warnings // []) | length) > 0' "$manifest" >/dev/null; then
+      color="warning"
+    fi
+  fi
+
+  jq -c --arg upload "$upload_line" --arg color "$color" '
+    {
+      attachments: [{
+        color: $color,
+        fallback: ((.trigger // "incident") + " incident " + (.incident_id // "unknown") + " on " + (.node // "?")
+                   + " -- " + ([(.artifacts // {})[] | select(. == "ok")] | length | tostring) + "/"
+                   + ([(.artifacts // {})[]] | length | tostring) + " artifacts ok"),
+        blocks: ([
+          {type: "header",
+           text: {type: "plain_text", text: (":rotating_light: " + (.trigger // "incident") + " incident"), emoji: true}},
+          {type: "section", fields: [
+            {type: "mrkdwn", text: ("*Incident*\n`" + (.incident_id // "unknown") + "`")},
+            {type: "mrkdwn", text: ("*Node*\n" + (.node // "?") + " (" + (.chain // "?") + ")")},
+            {type: "mrkdwn", text: ("*Triggered*\n" + (.triggered_at // "?"))},
+            {type: "mrkdwn", text: ("*Lag*\n" + (if .lag_blocks == null then "n/a" else (.lag_blocks | tostring) + " blocks" end))}
+          ]},
+          {type: "section",
+           text: {type: "mrkdwn",
+                  text: ("*Artifacts*\n" + ([(.artifacts // {}) | to_entries[] |
+                    (if .value == "ok" then ":white_check_mark: " else ":x: " end) + .key] | join("   ")))}}
+        ]
+        + (if ((.errors // []) | length) > 0 then
+            [{type: "section", text: {type: "mrkdwn", text: ("*Errors*\n" + (.errors | map(":x: " + .) | join("\n")))}}]
+           else [] end)
+        + (if ((.warnings // []) | length) > 0 then
+            [{type: "section", text: {type: "mrkdwn", text: ("*Warnings*\n" + (.warnings | map(":warning: " + .) | join("\n")))}}]
+           else [] end)
+        + [{type: "context", elements: [{type: "mrkdwn", text: $upload}]}])
+      }]
+    }' "$manifest"
+}
+
 # slack_notify_incident <incident_dir>
 # POSTs the incident summary to SLACK_WEBHOOK_URL. An unset or empty webhook
 # URL logs and skips with 0: notification is best-effort by design (see the
@@ -50,7 +116,7 @@ slack_notify_incident() {
   fi
 
   local payload
-  payload="$(jq -cn --arg text "$(_slack_build_text "$incident_dir")" '{text: $text}')"
+  payload="$(_slack_build_payload "$incident_dir")"
 
   local http_code
   if ! http_code="$(curl -sS --max-time "$timeout_seconds" -X POST \
