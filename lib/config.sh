@@ -26,6 +26,9 @@ load_config() {
   : "${HAPROXY_LOG_MAX_BYTES:=209715200}"
   : "${S3_PREFIX:=s3://node-recorder-snapshot}"
   : "${S3_UPLOAD_MAX_ATTEMPTS:=5}"
+  # Empty is a valid operator choice: notification is best-effort and
+  # skipped with a warning when no webhook is configured.
+  : "${SLACK_WEBHOOK_URL:=}"
   # Empty height queries are a valid operator choice: the manifest records
   # null heights with a warning instead of failing (see the spec's Manifest
   # decisions).
@@ -75,6 +78,6 @@ load_config() {
 
   export PROMETHEUS_URL PROMETHEUS_TIMEOUT_SECONDS ALERT_NAME NODE_ID CHAIN ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
-  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS
+  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS SLACK_WEBHOOK_URL
   return 0
 }
