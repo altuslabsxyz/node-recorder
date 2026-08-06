@@ -196,6 +196,9 @@ BLOCK_LAG_THRESHOLD_BLOCKS="40"
 
 # Node Recorder
 PROMETHEUS_URL="http://monitoring.internal:9090"
+# Per-query curl timeout. Deliberately below POLL_INTERVAL_SECONDS: a hung
+# Prometheus must fail the cycle, not stall the poll loop forever.
+PROMETHEUS_TIMEOUT_SECONDS="10"
 ALERT_NAME="CometBFTBlockHeightBehind"
 ALERT_STATE="firing"
 ALERT_NODE_LABEL="instance"
