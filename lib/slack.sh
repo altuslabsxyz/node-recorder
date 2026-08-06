@@ -35,6 +35,19 @@ _slack_build_text() {
     $upload' "$manifest"
 }
 
+# _slack_s3_console_url <s3_uri>
+# Prints the AWS console permalink for an s3://bucket/key URI (the object
+# page with its Download button) -- the bucket is private, so a raw https
+# object URL would just 403, while the console link works for anyone who can
+# log in. Prints nothing if the input is not an s3:// URI. The key charset is
+# already URL-safe: incident ids come from the sanitized allow-list.
+_slack_s3_console_url() {
+  local uri="$1"
+  [[ "$uri" == s3://*/* ]] || return 0
+  local rest="${uri#s3://}"
+  printf 'https://s3.console.aws.amazon.com/s3/object/%s?prefix=%s' "${rest%%/*}" "${rest#*/}"
+}
+
 # _slack_build_payload <incident_dir>
 # Prints the full webhook JSON: a single color-coded Block Kit attachment,
 # with no top-level text (it would render as a duplicate line above the
@@ -55,7 +68,14 @@ _slack_build_payload() {
 
   local upload_line color
   if [[ -f "$incident_dir/.uploaded" ]]; then
-    upload_line=":package: uploaded: \`$(cat "$incident_dir/.uploaded")\`"
+    local s3_uri console_url
+    s3_uri="$(cat "$incident_dir/.uploaded")"
+    console_url="$(_slack_s3_console_url "$s3_uri")"
+    if [[ -n "$console_url" ]]; then
+      upload_line=":package: uploaded: <${console_url}|${s3_uri}>"
+    else
+      upload_line=":package: uploaded: \`${s3_uri}\`"
+    fi
     color="good"
   else
     upload_line=":hourglass_flowing_sand: upload PENDING - bundle kept at \`${incident_dir}\`"

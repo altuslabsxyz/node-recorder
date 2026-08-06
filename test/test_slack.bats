@@ -51,7 +51,9 @@ EOF
   [[ "$blocks" == *"20260731T090700Z-block-lag"* ]]
   [[ "$blocks" == *"node-a (stable)"* ]]
   [[ "$blocks" == *"cpu_profile"* ]]
-  [[ "$(jq -r '.attachments[0].blocks[-1].elements[0].text' <<<"$payload")" == *"s3://bucket/node-recorder/stable/node-a/20260731T090700Z-block-lag.tar.gz"* ]]
+  context_line="$(jq -r '.attachments[0].blocks[-1].elements[0].text' <<<"$payload")"
+  [[ "$context_line" == *"s3://bucket/node-recorder/stable/node-a/20260731T090700Z-block-lag.tar.gz"* ]]
+  [[ "$context_line" == *"<https://s3.console.aws.amazon.com/s3/object/bucket?prefix=node-recorder/stable/node-a/20260731T090700Z-block-lag.tar.gz|"* ]]
   [[ "$(jq -r '.attachments[0].fallback' <<<"$payload")" == *"1/1 artifacts ok"* ]]
 }
 
