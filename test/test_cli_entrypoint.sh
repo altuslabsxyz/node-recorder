@@ -39,6 +39,32 @@ assert_file_exists "$incident_dir/pprof/cpu.pb.gz" "cpu profile collected"
 stablevisor_line="$(grep '^stablevisor_snapshot' "$incident_dir/results.tsv")"
 assert_eq "ok" "$(printf '%s' "$stablevisor_line" | cut -f2)" "stablevisor snapshot recorded as ok"
 
+snapshot_id="$(printf '%s' "$stablevisor_line" | cut -f3)"
+assert_dir_exists "$incident_dir/stablevisor/$snapshot_id" "snapshot is copied into the bundle under stablevisor/"
+assert_file_exists "$incident_dir/stablevisor/$snapshot_id/.complete" "copied snapshot keeps its .complete marker"
+assert_dir_exists "$snapshot_base_dir/$snapshot_id" "stablevisor's own copy is left in place (copied, not moved)"
+
 kill "$fake_pid" "$server_pid" 2>/dev/null
 wait "$fake_pid" "$server_pid" 2>/dev/null
-rm -rf "$incident_dir" "$snapshot_base_dir" "$server_out"
+
+# Copy-failure case: a file squatting on the bundle's stablevisor/ path makes
+# mkdir -p fail, so the snapshot is confirmed but cannot enter the bundle.
+incident_dir2="$(mktemp -d)"
+snapshot_base_dir2="$(mktemp -d)"
+bash "$TEST_DIR/fakes/fake_stablevisor.sh" "$snapshot_base_dir2" 0 &
+fake_pid2=$!
+sleep 0.2
+export FAKE_SYSTEMCTL_PID="$fake_pid2"
+export STABLEVISOR_SNAPSHOT_BASE_DIR="$snapshot_base_dir2"
+touch "$incident_dir2/stablevisor"
+
+"$REPO_ROOT/bin/capture-stablevisor-pprof.sh" "$incident_dir2" 2>/dev/null
+assert_exit_code 0 "$?" "entrypoint still exits 0 when the snapshot copy fails"
+stablevisor_line2="$(grep '^stablevisor_snapshot' "$incident_dir2/results.tsv")"
+assert_eq "error" "$(printf '%s' "$stablevisor_line2" | cut -f2)" "failed copy is recorded as an error"
+printf '%s' "$stablevisor_line2" | cut -f3 | grep -q "copying it into the bundle failed"
+assert_exit_code 0 "$?" "the error reason names the copy failure"
+
+kill "$fake_pid2" 2>/dev/null
+wait "$fake_pid2" 2>/dev/null
+rm -rf "$incident_dir" "$snapshot_base_dir" "$server_out" "$incident_dir2" "$snapshot_base_dir2"
