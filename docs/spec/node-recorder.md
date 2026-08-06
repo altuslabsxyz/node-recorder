@@ -229,6 +229,9 @@ HAPROXY_LOG_MAX_BYTES="209715200"
 
 S3_PREFIX="s3://node-recorder-snapshot"
 S3_UPLOAD_MAX_ATTEMPTS="5"
+# Uploaded-bundle retention: keep newest N (default 5), 0 = delete right
+# after upload, explicit empty = retention off (nothing is ever deleted).
+LOCAL_RETENTION_COUNT="5"
 
 SLACK_WEBHOOK_URL="<secret>"
 ```
@@ -296,9 +299,11 @@ Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST p
 - the run user gets only the minimum privileges needed for Stablevisor signaling, HAProxy log reads, and pprof loopback access
 - `NoNewPrivileges=true`
 - read-only filesystem outside the local incident directory
-- local artifacts are cleaned up according to the configured retention after a successful S3 upload
+- local artifacts are cleaned up according to the configured retention after a successful S3 upload: `LOCAL_RETENTION_COUNT` keeps the newest N uploaded bundles (default 5), `0` deletes each bundle right after its upload, and an explicit empty value turns retention off entirely
 - the host provides `jq`, `flock`, `curl`, `zcat`, `tar`, and the AWS CLI v2 — installed by the deployment role, and `load_config` fails fast at startup with an install hint when one is missing
 - deployed identically to Full Archive and RPC nodes through an Ansible role
+
+Decision: retention only ever deletes bundles that carry an `.uploaded` marker. A bundle whose upload is still pending or has been given up is never deleted, under any `LOCAL_RETENTION_COUNT` policy — deliberately not configurable, since an option that auto-deletes the only copy of un-uploaded incident data would defeat the tool's purpose. Abandoned bundles are an operator matter; the Slack notification already names their location.
 
 ## Failure Handling
 

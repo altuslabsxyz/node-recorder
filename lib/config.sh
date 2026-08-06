@@ -29,6 +29,10 @@ load_config() {
   # Empty is a valid operator choice: notification is best-effort and
   # skipped with a warning when no webhook is configured.
   : "${SLACK_WEBHOOK_URL:=}"
+  # ${VAR-default} (no colon) on purpose: unset gets the default, but an
+  # explicit empty value means "retention off" and must survive.
+  : "${LOCAL_RETENTION_COUNT-5}"
+  LOCAL_RETENTION_COUNT="${LOCAL_RETENTION_COUNT-5}"
   # Empty height queries are a valid operator choice: the manifest records
   # null heights with a warning instead of failing (see the spec's Manifest
   # decisions).
@@ -64,6 +68,12 @@ load_config() {
       return 1
     fi
   done
+  # LOCAL_RETENTION_COUNT sits outside the loop: empty is valid (retention
+  # off), but anything else must be a whole number.
+  if [[ -n "$LOCAL_RETENTION_COUNT" && ! "$LOCAL_RETENTION_COUNT" =~ ^(0|[1-9][0-9]*)$ ]]; then
+    log_error "config value must be a whole number or empty: LOCAL_RETENTION_COUNT='${LOCAL_RETENTION_COUNT}'"
+    return 1
+  fi
 
   local dep
   for dep in jq flock curl zcat tar aws; do
@@ -78,6 +88,6 @@ load_config() {
 
   export PROMETHEUS_URL PROMETHEUS_TIMEOUT_SECONDS ALERT_NAME NODE_ID CHAIN ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
-  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS SLACK_WEBHOOK_URL
+  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS SLACK_WEBHOOK_URL LOCAL_RETENTION_COUNT
   return 0
 }

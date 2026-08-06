@@ -11,7 +11,7 @@ teardown() {
   rm -f "$CONFIG_TMP"
   unset NODE_RECORDER_CONFIG PROMETHEUS_URL ALERT_NAME NODE_ID ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   unset INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
-  unset CHAIN LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS PROMETHEUS_TIMEOUT_SECONDS
+  unset CHAIN LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS PROMETHEUS_TIMEOUT_SECONDS LOCAL_RETENTION_COUNT
 }
 
 @test "load_config succeeds when required vars are present" {
@@ -58,6 +58,7 @@ EOF
   [ "$S3_PREFIX" = "s3://node-recorder-snapshot" ]
   [ "$S3_UPLOAD_MAX_ATTEMPTS" = "5" ]
   [ "$PROMETHEUS_TIMEOUT_SECONDS" = "10" ]
+  [ "$LOCAL_RETENTION_COUNT" = "5" ]
 }
 
 @test "load_config fails when a required variable is missing" {
@@ -156,4 +157,35 @@ CONF
   run load_config
   [ "$status" -eq 1 ]
   [[ "$output" == *"COOLDOWN_SECONDS"* ]]
+}
+
+@test "load_config keeps an explicit empty LOCAL_RETENTION_COUNT (retention off)" {
+  cat > "$CONFIG_TMP" <<'CONF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+LOCAL_RETENTION_COUNT=""
+CONF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  load_config
+  [ -z "$LOCAL_RETENTION_COUNT" ]
+}
+
+@test "load_config rejects a non-numeric LOCAL_RETENTION_COUNT" {
+  cat > "$CONFIG_TMP" <<'CONF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+LOCAL_RETENTION_COUNT="many"
+CONF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  run load_config
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"LOCAL_RETENTION_COUNT"* ]]
 }
