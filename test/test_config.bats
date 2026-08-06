@@ -2,13 +2,16 @@ setup() {
   source "${BATS_TEST_DIRNAME}/../lib/log.sh"
   source "${BATS_TEST_DIRNAME}/../lib/config.sh"
   CONFIG_TMP="$(mktemp)"
+  # aws is in the dependency check but not installed everywhere; the PATH
+  # fake satisfies `command -v` the same way the other fakes do.
+  PATH="${BATS_TEST_DIRNAME}/fakes/bin:$PATH"
 }
 
 teardown() {
   rm -f "$CONFIG_TMP"
   unset NODE_RECORDER_CONFIG PROMETHEUS_URL ALERT_NAME NODE_ID ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   unset INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
-  unset CHAIN LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
+  unset CHAIN LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS
 }
 
 @test "load_config succeeds when required vars are present" {
@@ -52,6 +55,8 @@ EOF
   [ "$HAPROXY_LOG_MAX_BYTES" = "209715200" ]
   [ -z "$LOCAL_HEIGHT_QUERY" ]
   [ -z "$NETWORK_TIP_HEIGHT_QUERY" ]
+  [ "$S3_PREFIX" = "s3://node-recorder-snapshot" ]
+  [ "$S3_UPLOAD_MAX_ATTEMPTS" = "5" ]
 }
 
 @test "load_config fails when a required variable is missing" {

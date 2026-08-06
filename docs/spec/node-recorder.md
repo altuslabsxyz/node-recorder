@@ -224,7 +224,7 @@ HAPROXY_LOG="/var/log/haproxy.log"
 LOG_WINDOW_BEFORE_SECONDS="600"
 HAPROXY_LOG_MAX_BYTES="209715200"
 
-S3_PREFIX="s3://altuslabs-node-recorder/node-recorder"
+S3_PREFIX="s3://node-recorder-snapshot"
 S3_UPLOAD_MAX_ATTEMPTS="5"
 
 SLACK_WEBHOOK_URL="<secret>"
@@ -240,11 +240,13 @@ Decision: each incident uploads as a single object, `${S3_PREFIX}/${CHAIN}/${NOD
 
 Decision: retry state lives next to the bundle. A successful upload writes an `.uploaded` marker (containing the S3 URI) inside the incident directory; each attempt increments an `.upload-attempts` counter, and after `S3_UPLOAD_MAX_ATTEMPTS` failed attempts the incident is skipped rather than retried forever. The pending scan retries every incident directory that has no `.uploaded` marker on each run, which implements the failure-handling row "local bundle is kept, retried with a limited retry count on the next run". The scan only considers directories that already contain `manifest.json` — run_capture writes it last, so it doubles as the bundle's completion marker (the same contract Stablevisor's `.complete` file provides) and keeps a half-captured bundle from being uploaded and marked done. These `.upload*` files are excluded from the tarball itself.
 
+Decision: the upload runs at the end of run_capture, after the manifest is written. "The next run" in the failure-handling row therefore means the next capture run: a failed upload is retried when the next incident's capture finishes, and `bin/upload-incidents.sh` exists for manual catch-up in between. Uploads are not attempted on every poll cycle — with a 15s poll interval a network outage would burn through the whole retry budget in about a minute, defeating the "limited retry count" intent.
+
 Decision: a failed attempt keeps the built tarball and reuses it on the next attempt — the bundle directory is immutable once capture finishes, so rebuilding (re-compressing up to hundreds of MB) would only burn CPU. The tarball is deleted after a successful upload; the bundle directory itself is removed later by the retention step (Capture Flow step 12), not by the uploader.
 
 ## S3 Upload Permissions
 
-Bucket: `altuslabs-node-recorder`. The policy below grants only what the upload step needs, write access under `node-recorder/`, no read, no delete, no bucket-level permissions.
+Bucket: `node-recorder-snapshot`. The policy below grants only what the upload step needs, write access under `node-recorder/`, no read, no delete, no bucket-level permissions.
 
 ```json
 {
@@ -257,7 +259,7 @@ Bucket: `altuslabs-node-recorder`. The policy below grants only what the upload 
         "s3:PutObject",
         "s3:AbortMultipartUpload"
       ],
-      "Resource": "arn:aws:s3:::altuslabs-node-recorder/node-recorder/*"
+      "Resource": "arn:aws:s3:::node-recorder-snapshot/*"
     }
   ]
 }
@@ -288,6 +290,7 @@ Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST p
 - `NoNewPrivileges=true`
 - read-only filesystem outside the local incident directory
 - local artifacts are cleaned up according to the configured retention after a successful S3 upload
+- the host provides `jq`, `flock`, `curl`, `zcat`, `tar`, and the AWS CLI v2 — installed by the deployment role, and `load_config` fails fast at startup with an install hint when one is missing
 - deployed identically to Full Archive and RPC nodes through an Ansible role
 
 ## Failure Handling

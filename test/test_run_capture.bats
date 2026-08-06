@@ -3,9 +3,15 @@ setup() {
   source "${NODE_RECORDER_HOME}/bin/node-recorder"
 
   # run_capture's manifest step reads these; unset height queries keep it
-  # from talking to Prometheus.
+  # from talking to Prometheus. The upload step builds the object URI from
+  # CHAIN, NODE_ID, and S3_PREFIX, and talks to the aws PATH fake.
   export CHAIN="stable"
+  export NODE_ID="node-a"
+  export S3_PREFIX="s3://bucket/node-recorder"
   unset LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
+  PATH="${BATS_TEST_DIRNAME}/fakes/bin:$PATH"
+  FAKE_AWS_LOG="$(mktemp)"
+  export FAKE_AWS_LOG
 
   export INCIDENTS_DIR="$(mktemp -d)"
   CALL_LOG="$(mktemp)"
@@ -30,8 +36,8 @@ EOF
 
 teardown() {
   rm -rf "$INCIDENTS_DIR" "$FAKE_BIN_DIR"
-  rm -f "$CALL_LOG"
-  unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT
+  rm -f "$CALL_LOG" "$FAKE_AWS_LOG"
+  unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT FAKE_AWS_EXIT
 }
 
 @test "run_capture creates an incident dir and runs both capture scripts against it, in order" {
@@ -59,6 +65,27 @@ teardown() {
   [ "$(jq -r '.node' "$m")" = "node-a" ]
   [ "$(jq -r '.chain' "$m")" = "stable" ]
   [ "$(jq -r '.trigger' "$m")" = "block_lag" ]
+}
+
+@test "run_capture uploads the finished bundle after writing the manifest" {
+  run run_capture "node-a" "AlertX"
+  [ "$status" -eq 0 ]
+
+  incident_dir="$(find "$INCIDENTS_DIR" -mindepth 1 -maxdepth 1 -type d)"
+  [ -f "$incident_dir/.uploaded" ]
+  [ "$(cat "$incident_dir/.uploaded")" = "s3://bucket/node-recorder/stable/node-a/$(basename "$incident_dir").tar.gz" ]
+  grep -q "^s3 cp " "$FAKE_AWS_LOG"
+}
+
+@test "run_capture returns 0 when the upload fails and leaves the bundle pending" {
+  export FAKE_AWS_EXIT=1
+
+  run run_capture "node-a" "AlertX"
+  [ "$status" -eq 0 ]
+
+  incident_dir="$(find "$INCIDENTS_DIR" -mindepth 1 -maxdepth 1 -type d)"
+  [ ! -f "$incident_dir/.uploaded" ]
+  [ "$(cat "$incident_dir/.upload-attempts")" = "1" ]
 }
 
 @test "run_capture passes the trigger time to the haproxy capture as an epoch near now" {
@@ -93,8 +120,10 @@ teardown() {
   # bash's errexit off inside run_capture, so the tests above cannot see an
   # errexit death. The daemon calls run_capture as a plain statement with
   # errexit active, so exercise that exact context in a fresh shell: if a
-  # failing capture line is not guarded, the shell dies before SURVIVED.
+  # failing capture or upload line is not guarded, the shell dies before
+  # SURVIVED.
   export FAKE_STABLEVISOR_PPROF_EXIT=1
+  export FAKE_AWS_EXIT=1
 
   run bash -c "source '${NODE_RECORDER_HOME}/bin/node-recorder'; run_capture node-a AlertX >/dev/null 2>&1; echo SURVIVED"
   [ "$status" -eq 0 ]
