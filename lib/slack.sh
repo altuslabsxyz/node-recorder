@@ -39,7 +39,8 @@ _slack_build_text() {
 # Prints the AWS console permalink for an s3://bucket/key URI (the object
 # page with its Download button) -- the bucket is private, so a raw https
 # object URL would just 403, while the console link works for anyone who can
-# log in. Prints nothing if the input is not an s3:// URI. The key charset is
+# log in. Shown as the bare URL, not as link text, so what renders is exactly
+# where the click goes. Prints nothing if the input is not an s3:// URI. The key charset is
 # already URL-safe: incident ids come from the sanitized allow-list.
 _slack_s3_console_url() {
   local uri="$1"
@@ -72,7 +73,7 @@ _slack_build_payload() {
     s3_uri="$(cat "$incident_dir/.uploaded")"
     console_url="$(_slack_s3_console_url "$s3_uri")"
     if [[ -n "$console_url" ]]; then
-      upload_line=":package: uploaded: <${console_url}|${s3_uri}>"
+      upload_line=":package: uploaded: <${console_url}>"
     else
       upload_line=":package: uploaded: \`${s3_uri}\`"
     fi
