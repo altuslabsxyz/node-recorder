@@ -235,6 +235,8 @@ SLACK_WEBHOOK_URL="<secret>"
 
 `BLOCK_LAG_THRESHOLD_BLOCKS` is applied on the Prometheus alert rule side and is `40` for `chain="stable"`. Node Recorder does not re-evaluate this threshold itself; the value here is documentation, not enforcement.
 
+Numeric settings (intervals, sizes, attempt counts) are validated at daemon startup; a non-numeric value fails startup with a message naming the variable, rather than crash-looping the daemon at its first use.
+
 Real secrets (including `SLACK_WEBHOOK_URL`) must not be committed to the script. On AWS, prefer the instance role. The authentication method for any other environment is decided separately.
 
 ## S3 Upload
