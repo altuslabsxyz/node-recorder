@@ -10,7 +10,7 @@ setup() {
 teardown() {
   rm -f "$CONFIG_TMP"
   unset NODE_RECORDER_CONFIG PROMETHEUS_URL ALERT_NAME NODE_ID ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
-  unset INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
+  unset INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR DAEMON_HOME CPU_PROFILE_SECONDS MEMPOOL_TIMEOUT_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
   unset CHAIN LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS PROMETHEUS_TIMEOUT_SECONDS LOCAL_RETENTION_COUNT
 }
 
@@ -21,6 +21,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
@@ -35,6 +36,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
@@ -48,8 +50,8 @@ EOF
   [ "$LOCK_FILE" = "/run/node-recorder.lock" ]
   [ "$INCIDENTS_DIR" = "/var/lib/node-recorder/incidents" ]
   [ "$STABLEVISOR_SERVICE_NAME" = "stablevisor" ]
-  [ "$PPROF_URL" = "http://127.0.0.1:6060/debug/pprof" ]
   [ "$CPU_PROFILE_SECONDS" = "20" ]
+  [ "$MEMPOOL_TIMEOUT_SECONDS" = "10" ]
   [ "$HAPROXY_LOG" = "/var/log/haproxy.log" ]
   [ "$LOG_WINDOW_BEFORE_SECONDS" = "600" ]
   [ "$HAPROXY_LOG_MAX_BYTES" = "209715200" ]
@@ -77,12 +79,28 @@ PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
+DAEMON_HOME="/home/user/.cometbft"
 EOF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
   run load_config
   [ "$status" -eq 1 ]
   [[ "$output" == *"STABLEVISOR_SNAPSHOT_BASE_DIR"* ]]
+}
+
+@test "load_config fails when DAEMON_HOME is missing" {
+  cat > "$CONFIG_TMP" <<'EOF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+EOF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  run load_config
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"DAEMON_HOME"* ]]
 }
 
 @test "load_config fails when a required dependency is missing from PATH" {
@@ -103,6 +121,7 @@ PROMETHEUS_URL="http://prom.test:9090"
 ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 CONF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
 
@@ -118,6 +137,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 POLL_INTERVAL_SECONDS="abc"
 CONF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
@@ -127,6 +147,23 @@ CONF
   [[ "$output" == *"POLL_INTERVAL_SECONDS"* ]]
 }
 
+@test "load_config fails and names the variable when MEMPOOL_TIMEOUT_SECONDS is not a number" {
+  cat > "$CONFIG_TMP" <<'CONF'
+PROMETHEUS_URL="http://prom.test:9090"
+ALERT_NAME="CometBFTBlockHeightBehind"
+NODE_ID="main-stable-archive-ovh-de"
+CHAIN="stable"
+STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
+MEMPOOL_TIMEOUT_SECONDS="abc"
+CONF
+  export NODE_RECORDER_CONFIG="$CONFIG_TMP"
+
+  run load_config
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"MEMPOOL_TIMEOUT_SECONDS"* ]]
+}
+
 @test "load_config rejects a numeric setting carrying a unit suffix" {
   cat > "$CONFIG_TMP" <<'CONF'
 PROMETHEUS_URL="http://prom.test:9090"
@@ -134,6 +171,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 COOLDOWN_SECONDS="15m"
 CONF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
@@ -150,6 +188,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 COOLDOWN_SECONDS="0900"
 CONF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
@@ -166,6 +205,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 LOCAL_RETENTION_COUNT=""
 CONF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
@@ -181,6 +221,7 @@ ALERT_NAME="CometBFTBlockHeightBehind"
 NODE_ID="main-stable-archive-ovh-de"
 CHAIN="stable"
 STABLEVISOR_SNAPSHOT_BASE_DIR="/var/lib/stablevisor/incidents"
+DAEMON_HOME="/home/user/.cometbft"
 LOCAL_RETENTION_COUNT="many"
 CONF
   export NODE_RECORDER_CONFIG="$CONFIG_TMP"
