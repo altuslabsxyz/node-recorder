@@ -8,6 +8,12 @@ setup() {
   export CHAIN="stable"
   export NODE_ID="node-a"
   export S3_PREFIX="s3://bucket/node-recorder"
+  # mempool_collect is stubbed below rather than actually resolved, so this
+  # never needs to point at a real config.toml; it only needs to be a path
+  # that provably has no config.toml under it, for the one test
+  # ("does not kill the daemon") that re-sources bin/node-recorder in a
+  # fresh subshell without the stub.
+  export DAEMON_HOME="/nonexistent/cometbft-home"
   unset LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY
   PATH="${BATS_TEST_DIRNAME}/fakes/bin:$PATH"
   FAKE_AWS_LOG="$(mktemp)"
@@ -32,6 +38,13 @@ EOF
   chmod +x "${FAKE_BIN_DIR}"/capture-*.sh
   export CAPTURE_STABLEVISOR_PPROF_BIN="${FAKE_BIN_DIR}/capture-stablevisor-pprof.sh"
   export CAPTURE_HAPROXY_LOG_BIN="${FAKE_BIN_DIR}/capture-haproxy-log.sh"
+
+  # mempool_collect is a lib function run_capture calls directly (unlike the
+  # two capture scripts above, which are separate processes substituted via
+  # *_BIN), so it's stubbed the same way run_capture itself is stubbed in
+  # test_node_recorder.bats -- by redefining the function after sourcing
+  # bin/node-recorder.
+  mempool_collect() { printf 'mempool %s\n' "$*" >> "$CALL_LOG"; }
 }
 
 teardown() {
@@ -40,7 +53,7 @@ teardown() {
   unset FAKE_STABLEVISOR_PPROF_EXIT FAKE_HAPROXY_LOG_EXIT FAKE_AWS_EXIT SLACK_WEBHOOK_URL LOCAL_RETENTION_COUNT
 }
 
-@test "run_capture creates an incident dir and runs both capture scripts against it, in order" {
+@test "run_capture creates an incident dir and runs stablevisor/pprof, mempool, then haproxy against it, in order" {
   run run_capture "node-a" "AlertX"
   [ "$status" -eq 0 ]
 
@@ -50,8 +63,10 @@ teardown() {
 
   line1="$(sed -n '1p' "$CALL_LOG")"
   line2="$(sed -n '2p' "$CALL_LOG")"
+  line3="$(sed -n '3p' "$CALL_LOG")"
   [ "$line1" = "stablevisor-pprof $incident_dir" ]
-  [[ "$line2" =~ ^haproxy-log\ $incident_dir\ [0-9]+$ ]]
+  [ "$line2" = "mempool $incident_dir/results.tsv $DAEMON_HOME $incident_dir/mempool.json 10" ]
+  [[ "$line3" =~ ^haproxy-log\ $incident_dir\ [0-9]+$ ]]
 }
 
 @test "run_capture writes a manifest for the incident after the captures" {
@@ -122,7 +137,7 @@ teardown() {
   run_capture "node-a" "AlertX"
   after="$(date +%s)"
 
-  epoch="$(sed -n '2p' "$CALL_LOG" | awk '{print $3}')"
+  epoch="$(sed -n '3p' "$CALL_LOG" | awk '{print $3}')"
   [ "$epoch" -ge "$before" ]
   [ "$epoch" -le "$after" ]
 }

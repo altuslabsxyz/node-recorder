@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib/manifest.sh - manifest.json generation (Capture Flow step 9 in
+# lib/manifest.sh - manifest.json generation (Capture Flow step 10 in
 # docs/spec/node-recorder.md).
 # shellcheck shell=bash
 

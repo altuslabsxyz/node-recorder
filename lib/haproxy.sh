@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib/haproxy.sh - HAProxy incident log extraction (Capture Flow step 8 in
+# lib/haproxy.sh - HAProxy incident log extraction (Capture Flow step 9 in
 # docs/spec/node-recorder.md).
 # shellcheck shell=bash
 

@@ -19,8 +19,8 @@ load_config() {
   : "${LOCK_FILE:=/run/node-recorder.lock}"
   : "${INCIDENTS_DIR:=/var/lib/node-recorder/incidents}"
   : "${STABLEVISOR_SERVICE_NAME:=stablevisor}"
-  : "${PPROF_URL:=http://127.0.0.1:6060/debug/pprof}"
   : "${CPU_PROFILE_SECONDS:=20}"
+  : "${MEMPOOL_TIMEOUT_SECONDS:=10}"
   : "${HAPROXY_LOG:=/var/log/haproxy.log}"
   : "${LOG_WINDOW_BEFORE_SECONDS:=600}"
   : "${HAPROXY_LOG_MAX_BYTES:=209715200}"
@@ -40,15 +40,20 @@ load_config() {
   : "${NETWORK_TIP_HEIGHT_QUERY:=}"
 
   # STABLEVISOR_SNAPSHOT_BASE_DIR has no sensible default: it is wherever this
-  # host's Stablevisor writes its incident snapshots. CHAIN labels the
-  # manifest (and, later, the S3 bundle path). Validating them here means a
-  # deployment mistake fails at daemon startup, not at the first incident.
+  # host's Stablevisor writes its incident snapshots. DAEMON_HOME has no
+  # sensible default either: it is this node's own CometBFT home directory,
+  # whose config.toml is the only source for the RPC and pprof addresses
+  # (see lib/cometbft.sh) -- there is no separate PPROF_URL/RPC URL setting
+  # to keep in sync with it. CHAIN labels the manifest (and, later, the S3
+  # bundle path). Validating them here means a deployment mistake fails at
+  # daemon startup, not at the first incident.
   local missing=()
   [[ -z "${PROMETHEUS_URL:-}" ]] && missing+=("PROMETHEUS_URL")
   [[ -z "${ALERT_NAME:-}" ]] && missing+=("ALERT_NAME")
   [[ -z "${NODE_ID:-}" ]] && missing+=("NODE_ID")
   [[ -z "${CHAIN:-}" ]] && missing+=("CHAIN")
   [[ -z "${STABLEVISOR_SNAPSHOT_BASE_DIR:-}" ]] && missing+=("STABLEVISOR_SNAPSHOT_BASE_DIR")
+  [[ -z "${DAEMON_HOME:-}" ]] && missing+=("DAEMON_HOME")
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     log_error "missing required config: ${missing[*]}"
@@ -62,7 +67,7 @@ load_config() {
   # are rejected too: bash arithmetic reads them as octal, which either dies
   # ("0900") or silently computes the wrong number ("020" is 16).
   local num_var
-  for num_var in POLL_INTERVAL_SECONDS COOLDOWN_SECONDS PROMETHEUS_TIMEOUT_SECONDS CPU_PROFILE_SECONDS LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES S3_UPLOAD_MAX_ATTEMPTS; do
+  for num_var in POLL_INTERVAL_SECONDS COOLDOWN_SECONDS PROMETHEUS_TIMEOUT_SECONDS CPU_PROFILE_SECONDS MEMPOOL_TIMEOUT_SECONDS LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES S3_UPLOAD_MAX_ATTEMPTS; do
     if [[ ! "${!num_var}" =~ ^(0|[1-9][0-9]*)$ ]]; then
       log_error "config value must be a whole number of seconds/bytes/attempts: ${num_var}='${!num_var}'"
       return 1
@@ -87,7 +92,7 @@ load_config() {
   done
 
   export PROMETHEUS_URL PROMETHEUS_TIMEOUT_SECONDS ALERT_NAME NODE_ID CHAIN ALERT_STATE ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
-  export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR PPROF_URL CPU_PROFILE_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
+  export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR DAEMON_HOME CPU_PROFILE_SECONDS MEMPOOL_TIMEOUT_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
   export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS SLACK_WEBHOOK_URL LOCAL_RETENTION_COUNT
   return 0
 }

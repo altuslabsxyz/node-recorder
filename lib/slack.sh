@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # lib/slack.sh - incident notification via Slack incoming webhook (Capture
-# Flow step 11 in docs/spec/node-recorder.md). Reads SLACK_WEBHOOK_URL from
+# Flow step 12 in docs/spec/node-recorder.md). Reads SLACK_WEBHOOK_URL from
 # the environment; SLACK_TIMEOUT_SECONDS caps the POST (default 10).
 # shellcheck shell=bash
 

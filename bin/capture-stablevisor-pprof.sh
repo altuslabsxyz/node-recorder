@@ -8,15 +8,17 @@
 # stablevisor_snapshot) to <incident_dir>/results.tsv.
 #
 # This is not the full Node Recorder orchestrator described in the spec's
-# 12-step Capture Flow (detection, dedup/cooldown, HAProxy capture,
-# manifest.json, S3 upload, and Slack notification are separate tickets).
-# It exists so this ticket's slice of the flow is independently runnable
-# and testable before the rest of Node Recorder exists.
+# 13-step Capture Flow (detection, dedup/cooldown, HAProxy capture, mempool
+# status capture, manifest.json, S3 upload, and Slack notification are
+# separate tickets). It exists so this ticket's slice of the flow is
+# independently runnable and testable before the rest of Node Recorder
+# exists.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
 source "$LIB_DIR/common.sh"
+source "$LIB_DIR/cometbft.sh"
 source "$LIB_DIR/stablevisor.sh"
 source "$LIB_DIR/pprof.sh"
 
@@ -24,7 +26,7 @@ incident_dir="${1:?usage: capture-stablevisor-pprof.sh <incident_dir>}"
 pprof_out_dir="$incident_dir/pprof"
 results_file="$incident_dir/results.tsv"
 
-pprof_base_url="${PPROF_URL:?PPROF_URL is required}"
+daemon_home="${DAEMON_HOME:?DAEMON_HOME is required}"
 stablevisor_snapshot_base_dir="${STABLEVISOR_SNAPSHOT_BASE_DIR:?STABLEVISOR_SNAPSHOT_BASE_DIR is required}"
 cpu_profile_seconds="${CPU_PROFILE_SECONDS:-20}"
 
@@ -48,8 +50,17 @@ else
   record_result "$results_file" "stablevisor_snapshot" "error" "trigger or confirmation failed"
 fi
 
-pprof_collect_quick "$results_file" "$pprof_base_url" "$pprof_out_dir"
-pprof_collect_cpu "$results_file" "$pprof_base_url" "$pprof_out_dir" "$cpu_profile_seconds"
+pprof_base_url=""
+if pprof_base_url="$(cometbft_pprof_url "$daemon_home")"; then
+  pprof_collect_quick "$results_file" "$pprof_base_url" "$pprof_out_dir"
+  pprof_collect_cpu "$results_file" "$pprof_base_url" "$pprof_out_dir" "$cpu_profile_seconds"
+else
+  pprof_unresolved_reason="could not resolve pprof address from ${daemon_home}/config/config.toml"
+  record_result "$results_file" "goroutine_profile" "error" "$pprof_unresolved_reason"
+  record_result "$results_file" "heap_profile" "error" "$pprof_unresolved_reason"
+  record_result "$results_file" "mutex_profile" "error" "$pprof_unresolved_reason"
+  record_result "$results_file" "cpu_profile" "error" "$pprof_unresolved_reason"
+fi
 
 log_info "capture-stablevisor-pprof: done, results in $results_file"
 exit 0

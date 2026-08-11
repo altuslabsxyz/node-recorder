@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib/retention.sh - uploaded-bundle retention (Capture Flow step 12 in
+# lib/retention.sh - uploaded-bundle retention (Capture Flow step 13 in
 # docs/spec/node-recorder.md). Reads LOCAL_RETENTION_COUNT from the
 # environment: keep the newest N uploaded bundles (default 5), 0 deletes each
 # bundle right after its upload, an explicit empty value turns retention off.

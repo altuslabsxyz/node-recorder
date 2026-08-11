@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # bin/upload-incidents.sh
 #
-# Runs Capture Flow step 10 from docs/spec/node-recorder.md: compress and
+# Runs Capture Flow step 11 from docs/spec/node-recorder.md: compress and
 # upload every incident bundle under INCIDENTS_DIR that has no .uploaded
 # marker yet, retrying failed uploads up to S3_UPLOAD_MAX_ATTEMPTS across
 # runs.
 #
 # This is not the full Node Recorder orchestrator described in the spec's
-# 12-step Capture Flow (detection, capture, manifest, Slack notification, and
+# 13-step Capture Flow (detection, capture, manifest, Slack notification, and
 # cleanup live elsewhere). It exists so this ticket's slice of the flow is
 # independently runnable and testable before the daemon wiring lands.
 set -uo pipefail
