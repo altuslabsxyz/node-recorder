@@ -17,13 +17,17 @@ server_pid=$!
 sleep 0.3
 port="$(cat "$server_out")"
 
+daemon_home="$(mktemp -d)"
+mkdir -p "$daemon_home/config"
+printf '[rpc]\npprof_laddr = "127.0.0.1:%s"\n' "$port" > "$daemon_home/config/config.toml"
+
 export PATH="$FAKES_BIN_DIR:$PATH"
 export STABLEVISOR_SERVICE_NAME="stablevisor"
 export FAKE_SYSTEMCTL_PID="$fake_pid"
 export STABLEVISOR_SNAPSHOT_BASE_DIR="$snapshot_base_dir"
 export STABLEVISOR_SNAPSHOT_TIMEOUT_SECONDS=5
 export STABLEVISOR_SNAPSHOT_POLL_INTERVAL_SECONDS=1
-export PPROF_URL="http://127.0.0.1:$port"
+export DAEMON_HOME="$daemon_home"
 export CPU_PROFILE_SECONDS=1
 export PPROF_CPU_GRACE_SECONDS=5
 
@@ -67,4 +71,4 @@ assert_exit_code 0 "$?" "the error reason names the copy failure"
 
 kill "$fake_pid2" 2>/dev/null
 wait "$fake_pid2" 2>/dev/null
-rm -rf "$incident_dir" "$snapshot_base_dir" "$server_out" "$incident_dir2" "$snapshot_base_dir2"
+rm -rf "$incident_dir" "$snapshot_base_dir" "$server_out" "$incident_dir2" "$snapshot_base_dir2" "$daemon_home"
