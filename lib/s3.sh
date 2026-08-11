@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib/s3.sh - incident bundle compression and S3 upload (Capture Flow step 10
+# lib/s3.sh - incident bundle compression and S3 upload (Capture Flow step 11
 # in docs/spec/node-recorder.md). Reads S3_PREFIX, CHAIN, and NODE_ID from the
 # environment; S3_UPLOAD_MAX_ATTEMPTS caps retries (default 5).
 # shellcheck shell=bash

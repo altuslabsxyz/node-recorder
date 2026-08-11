@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bin/capture-haproxy-log.sh <incident_dir> <triggered_at_epoch>
 #
-# Runs Capture Flow step 8 from docs/spec/node-recorder.md: extract the
+# Runs Capture Flow step 9 from docs/spec/node-recorder.md: extract the
 # HAProxy request log around the incident time window (reaching into the
 # previous day's rotated file when the window crosses the daily rotation
 # boundary) into <incident_dir>/logs/haproxy.log, capped at
@@ -9,8 +9,9 @@
 # <incident_dir>/results.tsv.
 #
 # This is not the full Node Recorder orchestrator described in the spec's
-# 12-step Capture Flow (detection, Stablevisor/pprof capture,
-# manifest.json, S3 upload, and Slack notification are separate tickets).
+# 13-step Capture Flow (detection, Stablevisor/pprof capture, mempool
+# status capture, manifest.json, S3 upload, and Slack notification are
+# separate tickets).
 # It exists so this ticket's slice of the flow is independently runnable
 # and testable before the rest of Node Recorder exists.
 set -uo pipefail
