@@ -47,7 +47,7 @@ EOF
   [ "$POLL_INTERVAL_SECONDS" = "15" ]
   [ "$COOLDOWN_SECONDS" = "900" ]
   [ "$STATE_DIR" = "/var/lib/node-recorder/state" ]
-  [ "$LOCK_FILE" = "/run/node-recorder.lock" ]
+  [ "$LOCK_FILE" = "/run/node-recorder/node-recorder.lock" ]
   [ "$INCIDENTS_DIR" = "/var/lib/node-recorder/incidents" ]
   [ "$STABLEVISOR_SERVICE_NAME" = "stablevisor" ]
   [ "$CPU_PROFILE_SECONDS" = "20" ]

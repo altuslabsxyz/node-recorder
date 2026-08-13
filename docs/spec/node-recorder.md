@@ -302,7 +302,7 @@ Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST p
 /etc/node-recorder/config
 /var/lib/node-recorder/state/
 /var/lib/node-recorder/incidents/
-/run/node-recorder.lock
+/run/node-recorder/node-recorder.lock
 ```
 
 ### systemd
