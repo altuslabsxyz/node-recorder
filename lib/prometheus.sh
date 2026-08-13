@@ -39,6 +39,30 @@ query_first_value() {
   return 0
 }
 
+# verify_node_label_match
+# Startup sanity check on the ALERT_NODE_LABEL/NODE_ID pair. PromQL's `=` is an
+# exact string match, so a NODE_ID that does not equal the label value
+# Prometheus actually carries makes query_alert_state's ALERTS lookup return an
+# empty set forever -- which is indistinguishable from "this node is healthy".
+# The daemon would poll for years, capture nothing and never complain, so the
+# mismatch is worth one loud line at startup. `up` stands in for ALERTS here
+# because it exists for every scrape target at all times, while ALERTS is
+# legitimately empty whenever nothing is firing. This assumes ALERT_NODE_LABEL
+# is a target label, true for the `instance` default; a label attached only by
+# the alert rule would not appear on `up` and would be reported as a mismatch.
+# Returns 1 on both a mismatch and an unreachable Prometheus: the caller treats
+# this as advisory, never as a reason to refuse to start.
+verify_node_label_match() {
+  if query_first_value "up{${ALERT_NODE_LABEL}=\"${NODE_ID}\"}" >/dev/null; then
+    log_info "node label check: ${ALERT_NODE_LABEL}=\"${NODE_ID}\" matches a Prometheus target"
+    return 0
+  fi
+
+  log_error "node label check failed: no Prometheus target matches ${ALERT_NODE_LABEL}=\"${NODE_ID}\" (the preceding error gives the cause)"
+  log_error "if this is a NODE_ID mismatch rather than an unreachable Prometheus, the alert query will always come back empty and no incident will ever be captured"
+  return 1
+}
+
 query_alert_state() {
   local query="ALERTS{alertname=\"${ALERT_NAME}\", ${ALERT_NODE_LABEL}=\"${NODE_ID}\"}"
   local raw

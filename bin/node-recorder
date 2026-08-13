@@ -124,6 +124,12 @@ main() {
   load_config
   log_info "node-recorder starting: node=${NODE_ID} alertname=${ALERT_NAME} poll_interval=${POLL_INTERVAL_SECONDS}s"
 
+  # Advisory, never fatal -- hence the `|| true` under this file's `set -e`.
+  # Prometheus is routinely unreachable at boot (both come up together), and
+  # under systemd's Restart=always a hard failure here would be a crash loop
+  # rather than a diagnosis. Logging is the whole point: see the function.
+  verify_node_label_match || true
+
   while true; do
     poll_once
     sleep "$POLL_INTERVAL_SECONDS"
