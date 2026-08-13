@@ -130,7 +130,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/node-recorder /run/node-recorder.lock
+RuntimeDirectory=node-recorder
+ReadWritePaths=/var/lib/node-recorder
 
 [Install]
 WantedBy=multi-user.target
