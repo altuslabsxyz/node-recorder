@@ -83,6 +83,9 @@ DAEMON_HOME=
 # MEMPOOL_TIMEOUT_SECONDS="10"
 # HAPROXY_LOG="/var/log/haproxy.log"
 # S3_PREFIX="s3://<bucket>/node-recorder"
+# Only used to build the object URL in the Slack notification. Defaults to
+# AWS_DEFAULT_REGION, then AWS_REGION, then the region-less S3 endpoint.
+# S3_REGION="ap-northeast-1"
 # SLACK_WEBHOOK_URL=
 # LOCAL_RETENTION_COUNT="5"
 EOF

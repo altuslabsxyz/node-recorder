@@ -25,6 +25,11 @@ load_config() {
   : "${HAPROXY_LOG_MAX_BYTES:=209715200}"
   : "${S3_PREFIX:=s3://node-recorder-snapshot}"
   : "${S3_UPLOAD_MAX_ATTEMPTS:=5}"
+  # Only used to build the object URL in the Slack notification, never for
+  # the upload itself (the AWS CLI resolves its own region). Left empty on
+  # purpose: lib/slack.sh falls back to AWS_DEFAULT_REGION, then AWS_REGION,
+  # then the region-less global endpoint.
+  : "${S3_REGION:=}"
   # Empty is a valid operator choice: notification is best-effort and
   # skipped with a warning when no webhook is configured.
   : "${SLACK_WEBHOOK_URL:=}"
@@ -92,6 +97,6 @@ load_config() {
 
   export PROMETHEUS_URL PROMETHEUS_TIMEOUT_SECONDS ALERT_NAME NODE_ID CHAIN ALERT_NODE_LABEL POLL_INTERVAL_SECONDS COOLDOWN_SECONDS STATE_DIR LOCK_FILE
   export INCIDENTS_DIR STABLEVISOR_SERVICE_NAME STABLEVISOR_SNAPSHOT_BASE_DIR DAEMON_HOME CPU_PROFILE_SECONDS MEMPOOL_TIMEOUT_SECONDS HAPROXY_LOG LOG_WINDOW_BEFORE_SECONDS HAPROXY_LOG_MAX_BYTES
-  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_UPLOAD_MAX_ATTEMPTS SLACK_WEBHOOK_URL LOCAL_RETENTION_COUNT
+  export LOCAL_HEIGHT_QUERY NETWORK_TIP_HEIGHT_QUERY S3_PREFIX S3_REGION S3_UPLOAD_MAX_ATTEMPTS SLACK_WEBHOOK_URL LOCAL_RETENTION_COUNT
   return 0
 }
