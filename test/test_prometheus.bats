@@ -104,3 +104,43 @@ export -f curl
   run query_first_value 'up'
   [ "$status" -eq 1 ]
 }
+
+@test "verify_node_label_match succeeds when a target carries the node label" {
+  export CURL_FIXTURE=height
+  run verify_node_label_match
+  [ "$status" -eq 0 ]
+}
+
+@test "verify_node_label_match fails when no target carries the node label" {
+  export CURL_FIXTURE=absent
+  run verify_node_label_match
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no Prometheus target matches"* ]]
+  [[ "$output" == *'instance="main-stable-archive-ovh-de"'* ]]
+}
+
+@test "verify_node_label_match fails when Prometheus is unreachable" {
+  export CURL_FIXTURE=network_error
+  run verify_node_label_match
+  [ "$status" -eq 1 ]
+}
+
+@test "verify_node_label_match queries the configured label, not a hardcoded instance" {
+  export ALERT_NODE_LABEL="target"
+  QUERY_LOG="$(mktemp)"
+  # Shadows the exported fake to capture the query text bats otherwise discards.
+  curl() {
+    local arg
+    for arg in "$@"; do
+      [[ "$arg" == query=* ]] && printf '%s\n' "$arg" >> "$QUERY_LOG"
+    done
+    cat "${BATS_TEST_DIRNAME}/fixtures/height.json"
+    printf '\n200'
+  }
+
+  verify_node_label_match
+
+  run grep -qxF 'query=up{target="main-stable-archive-ovh-de"}' "$QUERY_LOG"
+  rm -f "$QUERY_LOG"
+  [ "$status" -eq 0 ]
+}

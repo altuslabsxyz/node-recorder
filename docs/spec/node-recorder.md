@@ -56,6 +56,10 @@ ALERTS{
 
 Confirmed: the `instance` label carries the `NODE_ID` format used elsewhere in this doc (e.g. `main-stable-archive-ovh-de`), not the `target` label the rule also carries. The label name used for matching is kept configurable (`ALERT_NODE_LABEL`, see Configuration) rather than hardcoded to `instance`, in case this changes per node or network later.
 
+The node-label match is what keeps each host to its own incidents: the daemon on node B queries `instance="B"`, so a firing alert on node A is never in B's result set and cannot trigger a capture there. The local cooldown state is keyed on `node + alertname` for the same reason.
+
+Decision: because PromQL's `=` is an exact string match, a `NODE_ID` that does not equal the label value Prometheus carries yields an empty result set — indistinguishable from a healthy node, so the daemon would poll indefinitely, capture nothing, and never report a problem. At startup the daemon therefore queries `up{<ALERT_NODE_LABEL>="<NODE_ID>"}` once and logs an error naming the label and value when nothing matches. `up` is used rather than `ALERTS` because it exists for every scrape target at all times, whereas `ALERTS` is legitimately empty whenever nothing is firing. The check is advisory and never blocks startup: Prometheus is routinely unreachable at boot, and under `Restart=always` a hard failure would produce a crash loop instead of a diagnosis. It assumes `ALERT_NODE_LABEL` names a target label (true for the `instance` default); a label attached only by the alert rule would not appear on `up` and would be reported as a mismatch.
+
 Incident capture only runs when a firing alert exists for that node.
 
 To avoid repeated collection, Node Recorder keeps a state machine:
@@ -204,7 +208,6 @@ PROMETHEUS_URL="http://monitoring.internal:9090"
 # Prometheus must fail the cycle, not stall the poll loop forever.
 PROMETHEUS_TIMEOUT_SECONDS="10"
 ALERT_NAME="CometBFTBlockHeightBehind"
-ALERT_STATE="firing"
 ALERT_NODE_LABEL="instance"
 POLL_INTERVAL_SECONDS="15"
 COOLDOWN_SECONDS="900"
