@@ -2,28 +2,86 @@
 # lib/stablevisor.sh - Stablevisor PID lookup, SIGUSR1, and snapshot
 # confirmation (Capture Flow step 5 in docs/spec/node-recorder.md).
 
+# _stablevisor_show_value <systemctl_show_output> <property>
+# Prints the value of <property> from `systemctl show` key=value output.
+# Parsed by key rather than by line position because the order systemd
+# prints requested properties in is not guaranteed across versions.
+_stablevisor_show_value() {
+  local raw="$1"
+  local key="$2"
+  local line
+
+  while IFS= read -r line; do
+    if [[ "$line" == "${key}="* ]]; then
+      printf '%s\n' "${line#*=}"
+      return 0
+    fi
+  done <<<"$raw"
+
+  return 0
+}
+
 # stablevisor_get_pid
 # Prints the Stablevisor MainPID to stdout on success. Returns 1 (nothing
-# printed) if STABLEVISOR_SERVICE_NAME is unset, systemctl fails, or
-# MainPID is 0 (service not running). Never calls exit, so a missing
-# STABLEVISOR_SERVICE_NAME is a normal failure return, not a shell exit.
+# printed) if STABLEVISOR_SERVICE_NAME is unset, systemctl fails, the unit
+# does not exist, or MainPID is 0 (unit loaded but not running). Never calls
+# exit, so a missing STABLEVISOR_SERVICE_NAME is a normal failure return,
+# not a shell exit.
+#
+# Every failure path logs, and a non-existent unit is reported differently
+# from a stopped one. The distinction matters because the two need opposite
+# responses: a wrong STABLEVISOR_SERVICE_NAME is a config typo to fix here,
+# while a stopped unit is a problem on the Stablevisor side. Both used to
+# return silently and surface only as manifest.json's undifferentiated
+# "stablevisor_snapshot: trigger or confirmation failed".
 stablevisor_get_pid() {
   if [[ -z "${STABLEVISOR_SERVICE_NAME:-}" ]]; then
     log_error "stablevisor_get_pid: STABLEVISOR_SERVICE_NAME is not set"
     return 1
   fi
 
-  local pid
-  if ! pid="$(systemctl show "$STABLEVISOR_SERVICE_NAME" --property=MainPID --value 2>/dev/null)"; then
+  local raw
+  if ! raw="$(systemctl show "$STABLEVISOR_SERVICE_NAME" --property=LoadState,MainPID 2>/dev/null)"; then
+    log_error "stablevisor_get_pid: systemctl show failed for unit '${STABLEVISOR_SERVICE_NAME}'"
+    return 1
+  fi
+
+  local load_state pid
+  load_state="$(_stablevisor_show_value "$raw" "LoadState")"
+  pid="$(_stablevisor_show_value "$raw" "MainPID")"
+
+  if [[ "$load_state" == "not-found" ]]; then
+    log_error "stablevisor_get_pid: no systemd unit named '${STABLEVISOR_SERVICE_NAME}'; set STABLEVISOR_SERVICE_NAME to the real unit (systemctl list-units --type=service lists them)"
     return 1
   fi
 
   if [[ -z "$pid" || "$pid" == "0" ]]; then
+    log_error "stablevisor_get_pid: unit '${STABLEVISOR_SERVICE_NAME}' exists but is not running (MainPID=0)"
     return 1
   fi
 
   printf '%s\n' "$pid"
   return 0
+}
+
+# verify_stablevisor_unit
+# Startup counterpart to verify_node_label_match in lib/prometheus.sh: a
+# wrong STABLEVISOR_SERVICE_NAME is invisible until the first incident, and
+# then it only shows up as one failed artifact inside manifest.json, which
+# reads the same as "this node has no Stablevisor". Checking once at startup
+# turns that into a line an operator sees while they are still deploying.
+# stablevisor_get_pid has already logged the specific cause, so this adds
+# only the consequence. Returns 1 on any resolution failure; the caller
+# treats it as advisory and never refuses to start.
+verify_stablevisor_unit() {
+  local pid
+  if pid="$(stablevisor_get_pid)"; then
+    log_info "stablevisor unit check: '${STABLEVISOR_SERVICE_NAME}' is running (pid ${pid})"
+    return 0
+  fi
+
+  log_error "stablevisor unit check failed: incident captures will record stablevisor_snapshot as an error until this is resolved"
+  return 1
 }
 
 # stablevisor_trigger_snapshot <base_dir> <out_var_name>

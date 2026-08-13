@@ -13,6 +13,10 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/cometbft.sh"
 # shellcheck source=lib/prometheus.sh
 source "${SCRIPT_DIR}/lib/prometheus.sh"
+# Sourced for the startup unit check only. The snapshot trigger itself runs
+# in bin/capture-stablevisor-pprof.sh, which sources this separately.
+# shellcheck source=lib/stablevisor.sh
+source "${SCRIPT_DIR}/lib/stablevisor.sh"
 # shellcheck source=lib/state.sh
 source "${SCRIPT_DIR}/lib/state.sh"
 # shellcheck source=lib/incident.sh
@@ -129,6 +133,10 @@ main() {
   # under systemd's Restart=always a hard failure here would be a crash loop
   # rather than a diagnosis. Logging is the whole point: see the function.
   verify_node_label_match || true
+  # Same contract as the label check above: advisory, logged, never fatal.
+  # A node that genuinely has no Stablevisor is a supported deployment, so
+  # this cannot be an error that refuses to start.
+  verify_stablevisor_unit || true
 
   while true; do
     poll_once
