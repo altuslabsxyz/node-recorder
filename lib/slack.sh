@@ -35,18 +35,40 @@ _slack_build_text() {
     $upload' "$manifest"
 }
 
-# _slack_s3_console_url <s3_uri>
-# Prints the AWS console permalink for an s3://bucket/key URI (the object
-# page with its Download button) -- the bucket is private, so a raw https
-# object URL would just 403, while the console link works for anyone who can
-# log in. Shown as the bare URL, not as link text, so what renders is exactly
-# where the click goes. Prints nothing if the input is not an s3:// URI. The key charset is
-# already URL-safe: incident ids come from the sanitized allow-list.
-_slack_s3_console_url() {
+# _slack_s3_object_url <s3_uri>
+# Prints the virtual-hosted-style object URL for an s3://bucket/key URI,
+# "https://<bucket>.s3.<region>.amazonaws.com/<key>". Shown as the bare URL,
+# not as link text, so what renders is exactly where the click goes. Prints
+# nothing if the input is not an s3:// URI, leaving the caller to show the
+# raw value. The key charset is already URL-safe: incident ids come from the
+# sanitized allow-list.
+#
+# The region comes from S3_REGION, then the AWS SDK's own AWS_DEFAULT_REGION
+# and AWS_REGION, so the usual deployment needs no extra setting: install.sh
+# already wires /etc/node-recorder/aws-credentials in as an EnvironmentFile.
+# With none of them set (an EC2 instance profile takes its region from IMDS,
+# not the environment) the URL falls back to the region-less global endpoint,
+# which S3 redirects to the right region. Deriving it from the bucket instead
+# is not an option: the upload IAM policy grants only PutObject and
+# AbortMultipartUpload, so GetBucketLocation would be denied.
+#
+# Note this URL is not anonymously reachable, since the bucket is private. It
+# resolves for a logged-in console session and is the exact path `aws s3 cp`
+# takes, which is what the operators reading these notifications want.
+_slack_s3_object_url() {
   local uri="$1"
   [[ "$uri" == s3://*/* ]] || return 0
+
   local rest="${uri#s3://}"
-  printf 'https://s3.console.aws.amazon.com/s3/object/%s?prefix=%s' "${rest%%/*}" "${rest#*/}"
+  local bucket="${rest%%/*}"
+  local key="${rest#*/}"
+  local region="${S3_REGION:-${AWS_DEFAULT_REGION:-${AWS_REGION:-}}}"
+
+  if [[ -n "$region" ]]; then
+    printf 'https://%s.s3.%s.amazonaws.com/%s' "$bucket" "$region" "$key"
+  else
+    printf 'https://%s.s3.amazonaws.com/%s' "$bucket" "$key"
+  fi
 }
 
 # _slack_build_payload <incident_dir>
@@ -69,11 +91,11 @@ _slack_build_payload() {
 
   local upload_line color
   if [[ -f "$incident_dir/.uploaded" ]]; then
-    local s3_uri console_url
+    local s3_uri object_url
     s3_uri="$(cat "$incident_dir/.uploaded")"
-    console_url="$(_slack_s3_console_url "$s3_uri")"
-    if [[ -n "$console_url" ]]; then
-      upload_line=":package: uploaded: <${console_url}>"
+    object_url="$(_slack_s3_object_url "$s3_uri")"
+    if [[ -n "$object_url" ]]; then
+      upload_line=":package: uploaded: <${object_url}>"
     else
       upload_line=":package: uploaded: \`${s3_uri}\`"
     fi
