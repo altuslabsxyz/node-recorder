@@ -99,6 +99,10 @@ Confirmed against Stablevisor's own incident-collector spec:
 - The snapshot's log capture is a ring buffer (5,000 lines / roughly 8-10 minutes of history by default), so SIGUSR1 must be sent promptly after the block-lag alert fires or earlier log context is lost.
 - Retention is 10 incidents or 10GB total, oldest deleted first. Node Recorder should pick up the newly created snapshot before it can be rotated away by unrelated incidents.
 
+Decision: `STABLEVISOR_SERVICE_NAME` is checked at startup the same way `NODE_ID` is, and for the same reason. The unit name varies per deployment (one test node runs Stablevisor as `stable.service`, not the `stablevisor` default), and a wrong name produces `MainPID=0`, which reaches the operator only as one failed artifact in `manifest.json` reading exactly like "this node has no Stablevisor". `verify_stablevisor_unit` resolves the PID once at startup and logs the outcome. Like the node-label check it is advisory and never blocks startup, since a node with no Stablevisor is a supported deployment.
+
+Decision: `stablevisor_get_pid` reports a non-existent unit (`LoadState=not-found`) separately from a unit that exists but is stopped (`MainPID=0`). The two need opposite responses, a config fix here versus an investigation on the Stablevisor side, and both previously returned without logging at all. `systemctl show` output is parsed by key rather than by line position, because the order systemd prints requested properties in is not guaranteed across versions.
+
 Decision: look up the PID via systemd (`systemctl show <STABLEVISOR_SERVICE_NAME> --property=MainPID --value`) immediately before sending the signal, rather than a PID file or `pgrep`/`pidof` name matching. Stablevisor is not documented to write a PID file, and process-name matching is fragile across restarts; systemd already tracks the authoritative live PID for any unit it supervises, and Node Recorder is itself deployed as a systemd service, so this adds no new dependency. A `MainPID` of `0` means the service isn't running, which routes into the existing "Stablevisor not running" failure path below.
 
 ## Collected Artifacts
