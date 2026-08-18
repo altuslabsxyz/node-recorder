@@ -24,6 +24,15 @@ assert_exit_code() {
   fi
 }
 
+assert_contains() {
+  local haystack="$1" needle="$2" msg="${3:-assert_contains}"
+  TESTS_RUN=$((TESTS_RUN + 1))
+  if [[ "$haystack" != *"$needle"* ]]; then
+    echo "FAIL: $msg (expected to contain [$needle], got [$haystack])" >&2
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
 assert_file_exists() {
   local path="$1" msg="${2:-assert_file_exists}"
   TESTS_RUN=$((TESTS_RUN + 1))

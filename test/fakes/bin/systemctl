@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # test/fakes/bin/systemctl - stands in for
-# `systemctl show <service> --property=MainPID --value` in tests.
-# Behavior controlled by FAKE_SYSTEMCTL_PID:
-#   unset       -> simulate command failure (exit 1)
-#   "0"         -> simulate "service not running"
-#   <n>         -> print n as MainPID
+# `systemctl show <service> --property=LoadState,MainPID` in tests.
+# Behavior controlled by two variables:
+#   FAKE_SYSTEMCTL_PID         unset -> simulate command failure (exit 1)
+#                              "0"   -> simulate "unit loaded but not running"
+#                              <n>   -> report n as MainPID
+#   FAKE_SYSTEMCTL_LOAD_STATE  defaults to "loaded"; set to "not-found" to
+#                              simulate a unit name that does not exist
+# Properties are printed one per line as key=value, the same shape real
+# systemctl uses without --value, so the caller must parse by key.
 
-if [[ "$1" == "show" && "$3" == "--property=MainPID" && "$4" == "--value" ]]; then
+if [[ "$1" == "show" && "$3" == "--property=LoadState,MainPID" ]]; then
   if [[ -z "${FAKE_SYSTEMCTL_PID:-}" ]]; then
     exit 1
   fi
-  echo "$FAKE_SYSTEMCTL_PID"
+  printf 'LoadState=%s\n' "${FAKE_SYSTEMCTL_LOAD_STATE:-loaded}"
+  printf 'MainPID=%s\n' "$FAKE_SYSTEMCTL_PID"
   exit 0
 fi
 

@@ -7,12 +7,17 @@ setup() {
   CURL_LOG="$(mktemp)"
   export CURL_LOG
   export SLACK_WEBHOOK_URL="https://hooks.slack.test/services/T000/B000/XXX"
+  # Pinned so the object URL is deterministic regardless of the host's AWS
+  # environment; the no-region fallback has its own test below.
+  unset AWS_DEFAULT_REGION AWS_REGION
+  export S3_REGION="ap-northeast-1"
 }
 
 teardown() {
   rm -rf "$(dirname "$INCIDENT_DIR")"
   rm -f "$CURL_LOG"
   unset SLACK_WEBHOOK_URL FAKE_CURL_HTTP_CODE FAKE_CURL_EXIT
+  unset S3_REGION AWS_DEFAULT_REGION AWS_REGION
 }
 
 # Records every invocation (one line: all args) and the --data payload to
@@ -52,7 +57,7 @@ EOF
   [[ "$blocks" == *"node-a (stable)"* ]]
   [[ "$blocks" == *"cpu_profile"* ]]
   context_line="$(jq -r '.attachments[0].blocks[-1].elements[0].text' <<<"$payload")"
-  [ "$context_line" = ":package: uploaded: <https://s3.console.aws.amazon.com/s3/object/bucket?prefix=node-recorder/stable/node-a/20260731T090700Z-block-lag.tar.gz>" ]
+  [ "$context_line" = ":package: uploaded: <https://bucket.s3.ap-northeast-1.amazonaws.com/node-recorder/stable/node-a/20260731T090700Z-block-lag.tar.gz>" ]
   [[ "$(jq -r '.attachments[0].fallback' <<<"$payload")" == *"1/1 artifacts ok"* ]]
 }
 
@@ -189,4 +194,50 @@ EOF2
 
   payload="$(grep '^PAYLOAD ' "$CURL_LOG" | sed 's/^PAYLOAD //')"
   [ "$(jq -r '.attachments[0].color' <<<"$payload")" = "danger" ]
+}
+
+@test "_slack_s3_object_url builds the virtual-hosted URL for the configured region" {
+  run _slack_s3_object_url "s3://node-recorder-snapshot/stable/Test_stable_archive_use1/20260813T094142Z-block-lag.tar.gz"
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://node-recorder-snapshot.s3.ap-northeast-1.amazonaws.com/stable/Test_stable_archive_use1/20260813T094142Z-block-lag.tar.gz" ]
+}
+
+@test "_slack_s3_object_url falls back to AWS_DEFAULT_REGION when S3_REGION is unset" {
+  unset S3_REGION
+  export AWS_DEFAULT_REGION="eu-central-1"
+  run _slack_s3_object_url "s3://bucket/a/b.tar.gz"
+  [ "$output" = "https://bucket.s3.eu-central-1.amazonaws.com/a/b.tar.gz" ]
+}
+
+@test "_slack_s3_object_url falls back to AWS_REGION when the others are unset" {
+  unset S3_REGION
+  export AWS_REGION="us-west-2"
+  run _slack_s3_object_url "s3://bucket/a/b.tar.gz"
+  [ "$output" = "https://bucket.s3.us-west-2.amazonaws.com/a/b.tar.gz" ]
+}
+
+@test "_slack_s3_object_url uses the global endpoint when no region is known" {
+  unset S3_REGION
+  run _slack_s3_object_url "s3://bucket/a/b.tar.gz"
+  [ "$output" = "https://bucket.s3.amazonaws.com/a/b.tar.gz" ]
+}
+
+@test "_slack_s3_object_url prints nothing for a non-s3 URI" {
+  run _slack_s3_object_url "/var/lib/node-recorder/incidents/x"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a non-s3 .uploaded marker degrades to the literal value instead of a broken link" {
+  write_manifest <<'EOF2'
+{"incident_id":"i","node":"n","chain":"c","trigger":"block_lag","triggered_at":"t","artifacts":{"cpu_profile":"ok"},"errors":[],"warnings":[]}
+EOF2
+  echo "not-an-s3-uri" > "$INCIDENT_DIR/.uploaded"
+
+  run slack_notify_incident "$INCIDENT_DIR"
+  [ "$status" -eq 0 ]
+
+  payload="$(grep '^PAYLOAD ' "$CURL_LOG" | sed 's/^PAYLOAD //')"
+  context_line="$(jq -r '.attachments[0].blocks[-1].elements[0].text' <<<"$payload")"
+  [ "$context_line" = ':package: uploaded: `not-an-s3-uri`' ]
 }

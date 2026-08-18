@@ -99,6 +99,10 @@ Confirmed against Stablevisor's own incident-collector spec:
 - The snapshot's log capture is a ring buffer (5,000 lines / roughly 8-10 minutes of history by default), so SIGUSR1 must be sent promptly after the block-lag alert fires or earlier log context is lost.
 - Retention is 10 incidents or 10GB total, oldest deleted first. Node Recorder should pick up the newly created snapshot before it can be rotated away by unrelated incidents.
 
+Decision: `STABLEVISOR_SERVICE_NAME` is checked at startup the same way `NODE_ID` is, and for the same reason. The unit name varies per deployment (one test node runs Stablevisor as `stable.service`, not the `stablevisor` default), and a wrong name produces `MainPID=0`, which reaches the operator only as one failed artifact in `manifest.json` reading exactly like "this node has no Stablevisor". `verify_stablevisor_unit` resolves the PID once at startup and logs the outcome. Like the node-label check it is advisory and never blocks startup, since a node with no Stablevisor is a supported deployment.
+
+Decision: `stablevisor_get_pid` reports a non-existent unit (`LoadState=not-found`) separately from a unit that exists but is stopped (`MainPID=0`). The two need opposite responses, a config fix here versus an investigation on the Stablevisor side, and both previously returned without logging at all. `systemctl show` output is parsed by key rather than by line position, because the order systemd prints requested properties in is not guaranteed across versions.
+
 Decision: look up the PID via systemd (`systemctl show <STABLEVISOR_SERVICE_NAME> --property=MainPID --value`) immediately before sending the signal, rather than a PID file or `pgrep`/`pidof` name matching. Stablevisor is not documented to write a PID file, and process-name matching is fragile across restarts; systemd already tracks the authoritative live PID for any unit it supervises, and Node Recorder is itself deployed as a systemd service, so this adds no new dependency. A `MainPID` of `0` means the service isn't running, which routes into the existing "Stablevisor not running" failure path below.
 
 ## Collected Artifacts
@@ -241,6 +245,10 @@ LOG_WINDOW_BEFORE_SECONDS="600"
 HAPROXY_LOG_MAX_BYTES="209715200"
 
 S3_PREFIX="s3://node-recorder-snapshot"
+# Only used to build the object URL in the Slack notification, never for the
+# upload itself. Falls back to AWS_DEFAULT_REGION, then AWS_REGION, then the
+# region-less S3 endpoint.
+S3_REGION=""
 S3_UPLOAD_MAX_ATTEMPTS="5"
 # Uploaded-bundle retention: keep newest N (default 5), 0 = delete right
 # after upload, explicit empty = retention off (nothing is ever deleted).
@@ -293,6 +301,8 @@ Attach this to the instance role (per the AWS preference above) rather than issu
 ## Slack Notification
 
 Decision: an unset `SLACK_WEBHOOK_URL` logs a warning and skips the notification. It is best-effort by design: environments without a webhook (development, staging) must still run, and a notification failure must never fail the capture. The notification is sent even when the S3 upload failed — "captured but stuck on this host" is exactly what an operator needs to hear — with the upload state marked in the message.
+
+Decision: the upload line links the bundle as a virtual-hosted-style object URL, `https://<bucket>.s3.<region>.amazonaws.com/<key>`, rather than an AWS console permalink. It is the same path `aws s3 cp` takes, so an operator can copy it straight into a fetch command, and it resolves in the browser for a logged-in console session. It is not anonymously reachable, since the bucket is private. The region comes from `S3_REGION`, then `AWS_DEFAULT_REGION`, then `AWS_REGION`, then the region-less global endpoint that S3 redirects. Reading it off the bucket is not an option: the upload policy grants only `PutObject` and `AbortMultipartUpload`, so `GetBucketLocation` would be denied. A non-`s3://` marker value is shown literally instead of being turned into a broken link.
 
 Decision: post via an **Incoming Webhook URL**, not a bot token. A single POST per incident (S3 location plus collection result summary) fits a post-only, single-channel use case. No message editing, reactions, or channel listing is needed, so the extra scope and setup of a full bot integration isn't justified. The webhook URL is a secret and follows the same handling as `SLACK_WEBHOOK_URL` above: not committed to the script, injected at deploy time.
 
